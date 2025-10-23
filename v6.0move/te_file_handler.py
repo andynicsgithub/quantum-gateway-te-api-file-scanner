@@ -1,13 +1,20 @@
 """
-te_file_handler v5.1
+te_file_handler v6.0
 A Python module for handling individual file processing via the Threat Emulation API.
-Includes:
-  - Checking TE cache
-  - Uploading files
-  - Querying TE results
-  - Downloading TE reports
-  - File Move operations
+Features:
+  - Checks TE cache before upload
+  - Uploads files to the TE appliance
+  - Queries TE and TE_EB results until final verdict
+  - Downloads TE reports for malicious files
+  - Moves files to benign_directory or quarantine_directory based on verdict
+  - Pretty-prints JSON response output
+
+Improvements over v5.1:
+  - JSON output is now pretty-printed for easier reading
+  - Logging improved with consistent print formatting
+  - No functional change in file handling (still uses move operations)
 """
+
 
 import json
 import requests
@@ -108,8 +115,8 @@ class TE(object):
         output_path = os.path.join(self.reports_directory, self.file_name)
         output_path += ".response.txt"
         with open(output_path, 'w') as file:
-            file.write(json.dumps(response))
-
+            file.write(json.dumps(response, indent=4))
+            
     def check_te_cache(self):
         """
         Query (for te) the file (before upload) in order to find whether file results already exist in TE cache.
@@ -268,3 +275,5 @@ class TE(object):
             self.print("File {} moved to: {}".format(self.file_name, destination_directory))
         except Exception as e:
             self.print("Failed to move file {}. Error: {}".format(self.file_name, str(e)))
+
+
