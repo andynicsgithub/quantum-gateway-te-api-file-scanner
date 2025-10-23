@@ -1,11 +1,12 @@
 """
-te_file_handler v4.0
+te_file_handler v5.1
 A Python module for handling individual file processing via the Threat Emulation API.
 Includes:
   - Checking TE cache
   - Uploading files
   - Querying TE results
   - Downloading TE reports
+  - File Move operations
 """
 
 import json
@@ -21,7 +22,7 @@ import shutil
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-SECONDS_TO_WAIT = 5
+SECONDS_TO_WAIT = 15
 MAX_RETRIES = 120
 
 
@@ -153,6 +154,7 @@ class TE(object):
         :return the (last) query response with the handled file TE results
         """
         self.print("Start sending Query requests of te and te_eb after TE upload")
+        time.sleep(SECONDS_TO_WAIT)
         request = copy.deepcopy(self.request_template)
         request['request'][0]['sha1'] = self.sha1
         data = json.dumps(request)
@@ -161,6 +163,7 @@ class TE(object):
         te_eb_found = False
         retry_no = 0
         while (not status_label) or (status_label == "PENDING") or (status_label == "PARTIALLY_FOUND"):
+            print()
             self.print("Sending Query request of te and te_eb")
             response = requests.post(url=self.url + "query", data=data, verify=False)
             response_j = response.json()
@@ -249,34 +252,19 @@ class TE(object):
                 self.parse_report_id(self.final_response)
                 if self.report_id != "":
                     self.download_report()
-                    self.copy_file(self.quarantine_directory)
+                    self.move_file(self.quarantine_directory)
             elif verdict == "Benign":
-                self.copy_file(self.benign_directory)
+                self.move_file(self.benign_directory)
 
-#    def move_file(self, destination_directory):
-#        """
-#        Move the file from its current location to the specified destination directory.
-#        :param destination_directory: The directory to which the file should be moved.
-#        """
-#        current_location = self.file_path
-#        destination_location = os.path.join(destination_directory, self.file_name)
-#        try:
-#            os.rename(current_location, destination_location)
-#            self.print("File {} moved to: {}".format(self.file_name, destination_directory))
-#        except Exception as e:
-#            self.print("Failed to move file {}. Error: {}".format(self.file_name, str(e)))
-
-
-    def copy_file(self, destination_directory):
+    def move_file(self, destination_directory):
         """
-        Copy the file from its current location to the specified destination directory.
-        :param destination_directory: The directory to which the file should be copied.
+        Move the file from its current location to the specified destination directory.
+        :param destination_directory: The directory to which the file should be moved.
         """
         current_location = self.file_path
         destination_location = os.path.join(destination_directory, self.file_name)
         try:
-            shutil.copy2(current_location, destination_location)
-            self.print("File {} copied to: {}".format(self.file_name, destination_directory))
+            os.rename(current_location, destination_location)
+            self.print("File {} moved to: {}".format(self.file_name, destination_directory))
         except Exception as e:
-            self.print("Failed to copy file {}. Error: {}".format(self.file_name, str(e)))
-
+            self.print("Failed to move file {}. Error: {}".format(self.file_name, str(e)))

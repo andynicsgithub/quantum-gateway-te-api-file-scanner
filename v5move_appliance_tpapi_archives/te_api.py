@@ -1,17 +1,19 @@
 """
-te_api v4.0
+te_api v5.1
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
   - Handle TE and TE_EB processing via the appliance
   - Store results in an output directory
   - Support concurrent processing of multiple files. Requires a command line argument.
+  - te_file_handler will now MOVE files from the source directory into either benign_directory or quarantine_directory based on TE verdict
 """
 
 from te_file_handler import TE
 import os
 import argparse
 import concurrent.futures
+import zipfile
 
 # Following variables can be assigned and used instead of adding them as arguments when running the te_api.py .
 #  input_directory and reports_directory have the following default settings.
@@ -94,12 +96,33 @@ def main():
             return
 
 
+    # Define the list of archive file extensions
+    archive_extensions = [".7z", ".arj", ".bz2", ".CAB", ".gz", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
+
     # A loop over the files in the input folder
     files = os.listdir(input_directory)
     print("Begin handling input files by TE")
 
+    # Separate archive files and other files
+    archive_files = []
+    other_files = []
+
+    for file_name in files:
+        full_path = os.path.join(input_directory, file_name)
+        extension = os.path.splitext(file_name)[1]
+        if extension.lower() in archive_extensions:
+            archive_files.append(file_name)
+        else:
+            other_files.append(file_name)
+
+    # Process other files concurrently
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-        executor.map(process_files, files)
+        executor.map(process_files, other_files)
+
+    # Process archive files sequentially
+    for file_name in archive_files:
+        process_files(file_name)
+
 
 def process_files(file_name):
     try:
@@ -110,7 +133,7 @@ def process_files(file_name):
     except Exception as E:
         print("Could not handle file: {} because: {}. Continue to handle the next file.".format(file_name, E))
 
-
 if __name__ == '__main__':
     main()
+
 
