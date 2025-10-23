@@ -1,9 +1,0 @@
-[DEFAULT]
-input_directory = /path/to/source/files
-reports_directory = /path/to/directory/for/report/files
-appliance_ip = 192.168.1.1
-benign_directory = /path/to/directory/for/safe/files
-quarantine_directory = /path/to/quarantine
-error_directory = /path/to/directory/for/files/that/error
-concurrency = 4
-seconds_to_wait = 10
