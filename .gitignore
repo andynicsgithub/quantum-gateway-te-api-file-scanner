@@ -1,0 +1,22 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+
+# Log files
+*.log
+
+# Configuration files specific to your machine
+config.ini
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Temporary files or editor backup files
+*.swp
+*.swo
+*.tmp
+*.bak
+
+# VS Code workspace settings (optional)
+.vscode/
