@@ -1,5 +1,7 @@
+#!/usr/bin/env python3
+
 """
-te_file_handler v6.2
+te_file_handler v6.3
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
@@ -9,10 +11,24 @@ Features:
   - Moves files to benign_directory, quarantine_directory, or error_directory based on verdict
   - Pretty-prints JSON response output
 
-Changes in v6.2 over v6.1:
-  - Added handling of an error_directory for files causing scanning errors
-  - Minor logging improvements for clarity and consistency
-  - No functional changes in core file handling
+Changes in v6.3 over v6.2:
+Comments / Notes:
+-----------------
+  1. TE class handles a single file at a time:
+     - Queries TE cache by SHA1 before uploading
+     - Uploads file if not found
+     - Polls TE and TE_EB results until final verdict
+  2. Moves files based on verdict into benign_directory, quarantine_directory, or error_directory.
+  3. Downloads TE reports for malicious files and saves them under reports_directory,
+     preserving subdirectory structure from input_directory.
+  4. SHA1 is calculated in 1KB blocks for memory efficiency.
+  5. Uses deep copy of request template to safely modify per file.
+  6. Implements retries for query with MAX_RETRIES and SECONDS_TO_WAIT interval.
+  7. Exception handling:
+     - Upload errors → move to error_directory
+     - Other errors logged but do not stop processing of other files
+  8. Supports nested subdirectories via sub_dir argument to preserve folder structure.
+  9. All printed messages include file path for easier debugging.
 """
 
 import json
@@ -44,10 +60,20 @@ class TE(object):
      3. Write the TE results (last query/upload response info) into the output folder.
           If resulted TE verdict is malicious then also download the TE report and write it into the output folder.
     """
-    def __init__(self, url, file_name, file_path, reports_directory, benign_directory, quarantine_directory, error_directory):
+    def __init__(self, url, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory):
         self.url = url
         self.file_name = file_name
-        self.file_path = file_path
+        self.sub_dir = sub_dir
+        self.full_path = full_path        
+        self.input_directory = input_directory
+        self.reports_directory = reports_directory
+        self.benign_directory = benign_directory
+        self.quarantine_directory = quarantine_directory
+        self.error_directory = error_directory
+        self.sha1 = ""
+        self.final_response = ""
+        self.final_status_label = ""
+        self.report_id = ""
         self.request_template = {
             "request": [{
                 "features": ["te", "te_eb"],
@@ -58,27 +84,22 @@ class TE(object):
                 }
             }]
         }
-        self.reports_directory = reports_directory
-        self.benign_directory = benign_directory
-        self.quarantine_directory = quarantine_directory
-        self.error_directory = error_directory
-        self.sha1 = ""
-        self.final_response = ""
-        self.final_status_label = ""
-        self.report_id = ""
+
+
+
 
     def print(self, msg):
         """
         Logging purpose
         """
-        print("file {} : {}".format(self.file_name, msg))
+        print("file {} : {}".format(self.full_path, msg))
 
     def set_file_sha1(self):
         """
         Calculates the file's sha1
         """
         sha1 = hashlib.sha1()
-        with open(self.file_path, 'rb') as f:
+        with open(self.full_path, 'rb') as f:
             while True:
                 block = f.read(2 ** 10)  # One-megabyte blocks
                 if not block:
@@ -112,9 +133,15 @@ class TE(object):
         Create the TE response info of handled file and write it into the output folder.
         :param response: last response
         """
-        output_path = os.path.join(self.reports_directory, self.file_name)
-        output_path += ".response.txt"
-        with open(output_path, 'w') as file:
+        output_path = os.path.join(self.reports_directory, self.sub_dir)
+        os.makedirs((output_path), exist_ok=True)
+        output_file = os.path.join(output_path, self.file_name)
+        output_file += ".response.txt"
+        print(f"self.reports_directory: {self.reports_directory}")
+        print(f"self.sub_dir: {self.sub_dir}")
+        print(f"self.file_name: {self.file_name}")
+        print(f"{output_file}")
+        with open(output_file, 'w') as file:
             file.write(json.dumps(response, indent=4))
             
     def check_te_cache(self):
@@ -142,7 +169,7 @@ class TE(object):
         data = json.dumps(request)
         curr_file = {
             'request': data,
-            'file': open(self.file_path, 'rb')
+            'file': open(self.full_path, 'rb')
         }
         self.print("Sending Upload request of te and te_eb")
         try:
@@ -209,26 +236,26 @@ class TE(object):
 
     def download_report(self):
         """
-        Download the TE report to the appliance, decode the downloaded archive and extract its files
-         into the output folder
+        Download the TE report to the appliance and save it as a .tgz file
         """
         try:
             self.print("Sending Download request for TE report")
             response = requests.get(url=self.url + "download?id=" + self.report_id, verify=False)
             encoded_content_string = response.text
             decoded_content = base64.b64decode(encoded_content_string)
-            decoded_report_archive_path = os.path.join(self.reports_directory, self.file_name + ".report.tar.gz")
-            decoded_report_archive_file = open(decoded_report_archive_path, "wb+")
-            decoded_report_archive_file.write(decoded_content)
-            report_dir = os.path.join(self.reports_directory, self.file_name + "_report")
-            if not os.path.exists(report_dir):
-                os.mkdir(report_dir)
-            report_tar = tarfile.open(decoded_report_archive_path)
-            report_tar.extractall(report_dir)
-            report_tar.close()
-            self.print("TE report is in sub-directory: {}".format(report_dir))
+            decoded_report_archive_path = os.path.join(self.reports_directory, self.sub_dir, self.file_name + ".report.tar.gz")
+            
+            # Ensure the directory for the report exists
+            os.makedirs(os.path.dirname(decoded_report_archive_path), exist_ok=True)
+            
+            # Write the content to the file
+            with open(decoded_report_archive_path, "wb") as decoded_report_archive_file:
+                decoded_report_archive_file.write(decoded_content)
+            
+            self.print("TE report downloaded to: {}".format(decoded_report_archive_path))
         except Exception as E:
             self.print("Downloading TE report failed:  {} ".format(E))
+
 
     def handle_file(self):
         """
@@ -254,29 +281,34 @@ class TE(object):
                 self.final_response = upload_response
                 self.final_status_label = upload_status_label
         self.create_response_info(self.final_response)
+
         if self.final_status_label == "FOUND":
+            self.print("move_file called")
             verdict = self.parse_verdict(self.final_response, "te")
-            if verdict == "Malicious":
-                self.parse_report_id(self.final_response)
-                if self.report_id != "":
-                    self.download_report()
-                    self.move_file(self.quarantine_directory)
-            elif verdict == "Benign":
-                self.move_file(self.benign_directory)
-            elif verdict == "Error":
-                self.move_file(self.error_directory)
+        if verdict == "Malicious":
+            self.move_file(self.quarantine_directory)
+            self.parse_report_id(self.final_response)
+            if self.report_id != "":
+                self.download_report()
+        elif verdict == "Benign":
+            self.move_file(self.benign_directory)
+        elif verdict == "Error":
+            self.move_file(self.error_directory)
+                
 
     def move_file(self, destination_directory):
         """
         Move the file from its current location to the specified destination directory.
         :param destination_directory: The directory to which the file should be moved.
         """
-        current_location = self.file_path
-        destination_location = os.path.join(destination_directory, self.file_name)
+        current_location = self.full_path
+        destination_path = os.path.join(destination_directory, self.sub_dir)
+        destination_location = os.path.join(destination_directory, self.sub_dir, self.file_name)
+        os.makedirs(destination_path, exist_ok=True)
+    
         try:
             os.rename(current_location, destination_location)
-            self.print("File {} moved to: {}".format(self.file_name, destination_directory))
+            self.print(f"File {self.file_name} moved to: {destination_location}")
         except Exception as e:
-            self.print("Failed to move file {}. Error: {}".format(self.file_name, str(e)))
-
+            self.print(f"Failed to move file {self.file_name}. Error: {str(e)}")
 
