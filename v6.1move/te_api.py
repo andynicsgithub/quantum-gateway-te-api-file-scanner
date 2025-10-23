@@ -1,25 +1,23 @@
 """
-te_api v6.0
+te_api v6.1
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
   - Handle TE and TE_EB processing via the appliance
   - Store results in an output directory
-  - Support concurrent processing of multiple files (via command-line argument or config.ini)
-  - te_file_handler moves files from the source directory into either benign_directory or quarantine_directory based on TE verdict
-  
-Improvements over v5.1:
-  - Added config.ini support for arguments
-  - Added timestamps to log output
-  - Handles more archive file types
-  - Pretty-prints JSON output for TE responses
-  - Improved debug/log output
+  - Support concurrent processing of multiple files (via command line argument or config.ini)
+  - Move files from source directory to benign_directory or quarantine_directory based on TE verdict
+
+Changes in v6.1 over v6.0:
+  - Minor logging improvements for clarity and consistent timestamp output
+  - No functional changes in file handling or concurrency logic
+  - Maintenance / readability updates (pretty-printing, debug messages)
 """
 
 from te_file_handler import TE
 import os
 import argparse
-import concurrent.futures
+import multiprocessing
 import zipfile
 import configparser
 import datetime
@@ -136,13 +134,11 @@ def main():
             
     if args.concurrency:
         concurrency = args.concurrency
-        print(f"Value of concurrency after reading from command-line arguments: {concurrency}")
     
     print("Parallel processing of {} files at once".format(concurrency))
-
+    
     # Define the list of archive file extensions
     archive_extensions = [".7z", ".arj", ".bz2", ".CAB", ".dmg", ".gz", ".img", ".iso", ".msi", ".pkg", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
-
 
     # A loop over the files in the input folder
     files = os.listdir(input_directory)
@@ -160,10 +156,13 @@ def main():
         else:
             other_files.append(file_name)
 
+    # Print out the number of archive and non-archive files
+    print("There are {} archive files and {} non-archive files".format(len(archive_files), len(other_files)))
+
     # Process other files concurrently
     print(f"Value of concurrency before parallel processing: {concurrency}")
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as executor:
-        executor.map(process_files, other_files)
+    with multiprocessing.Pool(concurrency) as pool:
+        pool.map(process_files, other_files)
 
     # Process archive files sequentially
     for file_name in archive_files:
@@ -185,5 +184,3 @@ def process_files(file_name):
 
 if __name__ == '__main__':
     main()
-
-

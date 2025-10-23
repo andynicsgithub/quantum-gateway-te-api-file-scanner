@@ -1,5 +1,5 @@
 """
-te_file_handler v6.0
+te_file_handler v6.1
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
@@ -9,12 +9,10 @@ Features:
   - Moves files to benign_directory or quarantine_directory based on verdict
   - Pretty-prints JSON response output
 
-Improvements over v5.1:
-  - JSON output is now pretty-printed for easier reading
-  - Logging improved with consistent print formatting
-  - No functional change in file handling (still uses move operations)
+Changes in v6.1 over v6.0:
+  - Minor logging improvements for clarity and consistency
+  - No functional changes in file handling
 """
-
 
 import json
 import requests
