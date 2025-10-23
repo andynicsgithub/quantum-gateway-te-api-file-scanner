@@ -18,6 +18,7 @@ If your use case requires that benign files be left in the input directory and o
 
 ### The flow
 Going through the input directory and handling each file in order to get its Threat Emulation results.
+Directory tree structure below the input directory will be reproduced in the bening directory.
 
 For each file:
 
@@ -35,12 +36,15 @@ For each file:
     
       5. If verdict is malicious then also download the TE report and place it in the reports dir.
 
-Directory tree structure below the input directory will be reproduced in the bening directory.
+
 
 
 
 ### Usage
 ~~~~
+Recommended: Edit the values in _config.ini.default_ to suit your environment, then change the name to _config.ini_.
+
+
 python te_api.py --help
 
 usage: te_api.py [-h] [-id] [-od] [-ip]
