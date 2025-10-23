@@ -1,15 +1,16 @@
 """
-te_api v6.1
+te_api v6.2
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
   - Handle TE and TE_EB processing via the appliance
   - Store results in an output directory
   - Support concurrent processing of multiple files (via command line argument or config.ini)
-  - Move files from source directory to benign_directory or quarantine_directory based on TE verdict
+  - Move files from source directory to benign_directory, quarantine_directory, or error_directory based on TE verdict
 
-Changes in v6.1 over v6.0:
-  - Minor logging improvements for clarity and consistent timestamp output
+Changes in v6.2 over v6.1:
+  - Added handling of an error_directory for files causing scanning errors
+  - Minor logging improvements for clarity and consistency
   - No functional changes in file handling or concurrency logic
   - Maintenance / readability updates (pretty-printing, debug messages)
 """
@@ -33,6 +34,7 @@ reports_directory = "te_response_data"
 appliance_ip = ""
 benign_directory = ""
 quarantine_directory = ""
+error_directory = ""
 
 def main():
     """
@@ -46,6 +48,7 @@ def main():
     global appliance_ip
     global benign_directory
     global quarantine_directory
+    global error_directory
     global concurrency
     global url
     # Set a default value for concurrency in case something goes wrong
@@ -68,10 +71,10 @@ def main():
             benign_directory = config['DEFAULT']['benign_directory']
         if 'quarantine_directory' in config['DEFAULT']:
             quarantine_directory = config['DEFAULT']['quarantine_directory']
+        if 'error_directory' in config['DEFAULT']:
+            error_directory = config['DEFAULT']['error_directory']
         if 'concurrency' in config['DEFAULT']:
-            print(f"Value of concurrency before reading from config file: {concurrency}")
             concurrency = int(config['DEFAULT']['concurrency'])
-            print(f"Value of concurrency after reading from config file: {concurrency}")
     
     parser = argparse.ArgumentParser()
     parser.add_argument("-in", "--input_directory", help="the input files folder to be scanned by TE")
@@ -80,7 +83,19 @@ def main():
     parser.add_argument('-n', '--concurrency', type=int, help='Number of concurrent loops')
     parser.add_argument('-out', '--benign_directory', help='the directory to move Benign files after scanning')
     parser.add_argument('-jail', '--quarantine_directory', help='the directory to move Malicious files after scanning')
+    parser.add_argument('-error', '--error_directory', help='the directory to move files which cause a scanning error')
     args = parser.parse_args()
+    
+    if args.appliance_ip:
+        appliance_ip = args.appliance_ip
+
+    if not appliance_ip:
+        print("\n\n  --> Missing appliance_ip !\n\n")
+        parser.print_help()
+        return
+    print("The appliance ip address : {}".format(appliance_ip))
+    url = "https://" + appliance_ip + ":18194/tecloud/api/v1/file/"
+    
     if args.input_directory:
         input_directory = args.input_directory
     print("The input files directory to be scanned by TE : {}".format(input_directory))
@@ -99,16 +114,6 @@ def main():
         except Exception as E1:
             print("could not create te_api output directory, because: {}".format(E1))
             return
-
-    if args.appliance_ip:
-        appliance_ip = args.appliance_ip
-
-    if not appliance_ip:
-        print("\n\n  --> Missing appliance_ip !\n\n")
-        parser.print_help()
-        return
-    print("The appliance ip address : {}".format(appliance_ip))
-    url = "https://" + appliance_ip + ":18194/tecloud/api/v1/file/"
 
     if args.benign_directory:
         benign_directory = args.benign_directory
@@ -131,7 +136,18 @@ def main():
             print("could not create Quarantine directory because: {}".format(E1))
             return
     print("The output directory for Malicious files: {}".format(quarantine_directory))
-            
+ 
+    if args.error_directory:
+        error_directory = args.error_directory
+    if not os.path.exists(error_directory):
+        print("Pre-processing: creating Benign directory {}".format(error_directory))
+        try:
+            os.mkdir(error_directory)
+        except Exception as E1:
+            print("could not create error directory because: {}".format(E1))
+            return
+    print("The output directory for Error files: {}".format(error_directory))
+ 
     if args.concurrency:
         concurrency = args.concurrency
     
@@ -177,7 +193,7 @@ def process_files(file_name):
     try:
         full_path = os.path.join(input_directory, file_name)
         print_with_timestamp("Handling file: {} by TE",file_name)
-        te = TE(url, file_name, full_path, reports_directory, benign_directory, quarantine_directory)
+        te = TE(url, file_name, full_path, reports_directory, benign_directory, quarantine_directory, error_directory)
         te.handle_file()
     except Exception as E:
         print("Could not handle file: {} because: {}. Continue to handle the next file.".format(file_name, E))

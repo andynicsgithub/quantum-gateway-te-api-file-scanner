@@ -1,17 +1,18 @@
 """
-te_file_handler v6.1
+te_file_handler v6.2
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
   - Uploads files to the TE appliance
   - Queries TE and TE_EB results until final verdict
   - Downloads TE reports for malicious files
-  - Moves files to benign_directory or quarantine_directory based on verdict
+  - Moves files to benign_directory, quarantine_directory, or error_directory based on verdict
   - Pretty-prints JSON response output
 
-Changes in v6.1 over v6.0:
+Changes in v6.2 over v6.1:
+  - Added handling of an error_directory for files causing scanning errors
   - Minor logging improvements for clarity and consistency
-  - No functional changes in file handling
+  - No functional changes in core file handling
 """
 
 import json
@@ -43,7 +44,7 @@ class TE(object):
      3. Write the TE results (last query/upload response info) into the output folder.
           If resulted TE verdict is malicious then also download the TE report and write it into the output folder.
     """
-    def __init__(self, url, file_name, file_path, reports_directory, benign_directory, quarantine_directory):
+    def __init__(self, url, file_name, file_path, reports_directory, benign_directory, quarantine_directory, error_directory):
         self.url = url
         self.file_name = file_name
         self.file_path = file_path
@@ -60,6 +61,7 @@ class TE(object):
         self.reports_directory = reports_directory
         self.benign_directory = benign_directory
         self.quarantine_directory = quarantine_directory
+        self.error_directory = error_directory
         self.sha1 = ""
         self.final_response = ""
         self.final_status_label = ""
@@ -147,6 +149,7 @@ class TE(object):
             response = requests.post(url=self.url + "upload", files=curr_file, verify=False)
         except Exception as E:
             self.print("Upload file failed: {}".format(E))
+            self.move_file(self.error_directory)            
             raise
         response_j = response.json()
         self.print("te and te_eb Upload response status : {}".format(response_j["response"][0]["status"]["label"]))
@@ -260,6 +263,8 @@ class TE(object):
                     self.move_file(self.quarantine_directory)
             elif verdict == "Benign":
                 self.move_file(self.benign_directory)
+            elif verdict == "Error":
+                self.move_file(self.error_directory)
 
     def move_file(self, destination_directory):
         """
