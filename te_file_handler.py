@@ -285,15 +285,15 @@ class TE(object):
         if self.final_status_label == "FOUND":
             self.print("move_file called")
             verdict = self.parse_verdict(self.final_response, "te")
-        if verdict == "Malicious":
-            self.move_file(self.quarantine_directory)
-            self.parse_report_id(self.final_response)
-            if self.report_id != "":
-                self.download_report()
-        elif verdict == "Benign":
-            self.move_file(self.benign_directory)
-        elif verdict == "Error":
-            self.move_file(self.error_directory)
+            if verdict == "Malicious":
+                self.move_file(self.quarantine_directory)
+                self.parse_report_id(self.final_response)
+                if self.report_id != "":
+                    self.download_report()
+            elif verdict == "Benign":
+                self.move_file(self.benign_directory)
+            elif verdict == "Error":
+                self.move_file(self.error_directory)
                 
 
     def move_file(self, destination_directory):

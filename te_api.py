@@ -203,6 +203,7 @@ def main():
     print("There are {} archive files and {} non-archive files".format(len(archive_files), len(other_files)))
     # Print out the contents of other_files
     for file_info in other_files:
+        file, sub_dir, full_path = file_info
         print(f"File: {file}, Subdirectory: {sub_dir}, Full Path: {full_path}")
     
     # =======================
