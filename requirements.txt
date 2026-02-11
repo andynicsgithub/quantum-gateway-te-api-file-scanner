@@ -1,0 +1,12 @@
+# TE API Scanner Dependencies
+
+# HTTP client for TE API
+requests>=2.31.0
+urllib3>=2.0.0
+
+# Windows support (conditional - only installed on Windows)
+pywin32>=306; sys_platform == 'win32'
+
+# Future dependencies for Phase 2 (watch mode)
+# Uncomment when implementing Phase 2:
+# watchdog>=3.0.0

@@ -41,6 +41,8 @@ import tarfile
 import copy
 import urllib3
 import shutil
+from pathlib import Path
+from path_handler import PathHandler
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -64,12 +66,13 @@ class TE(object):
         self.url = url
         self.file_name = file_name
         self.sub_dir = sub_dir
-        self.full_path = full_path        
-        self.input_directory = input_directory
-        self.reports_directory = reports_directory
-        self.benign_directory = benign_directory
-        self.quarantine_directory = quarantine_directory
-        self.error_directory = error_directory
+        # Convert to Path objects for cross-platform compatibility
+        self.full_path = Path(full_path) if not isinstance(full_path, Path) else full_path
+        self.input_directory = Path(input_directory) if not isinstance(input_directory, Path) else input_directory
+        self.reports_directory = Path(reports_directory) if not isinstance(reports_directory, Path) else reports_directory
+        self.benign_directory = Path(benign_directory) if not isinstance(benign_directory, Path) else benign_directory
+        self.quarantine_directory = Path(quarantine_directory) if not isinstance(quarantine_directory, Path) else quarantine_directory
+        self.error_directory = Path(error_directory) if not isinstance(error_directory, Path) else error_directory
         self.sha1 = ""
         self.final_response = ""
         self.final_status_label = ""
@@ -99,7 +102,7 @@ class TE(object):
         Calculates the file's sha1
         """
         sha1 = hashlib.sha1()
-        with open(self.full_path, 'rb') as f:
+        with open(str(self.full_path), 'rb') as f:
             while True:
                 block = f.read(2 ** 10)  # One-megabyte blocks
                 if not block:
@@ -133,15 +136,14 @@ class TE(object):
         Create the TE response info of handled file and write it into the output folder.
         :param response: last response
         """
-        output_path = os.path.join(self.reports_directory, self.sub_dir)
-        os.makedirs((output_path), exist_ok=True)
-        output_file = os.path.join(output_path, self.file_name)
-        output_file += ".response.txt"
+        output_path = self.reports_directory / self.sub_dir
+        output_path.mkdir(parents=True, exist_ok=True)
+        output_file = output_path / (self.file_name + ".response.txt")
         print(f"self.reports_directory: {self.reports_directory}")
         print(f"self.sub_dir: {self.sub_dir}")
         print(f"self.file_name: {self.file_name}")
         print(f"{output_file}")
-        with open(output_file, 'w') as file:
+        with open(str(output_file), 'w') as file:
             file.write(json.dumps(response, indent=4))
             
     def check_te_cache(self):
@@ -169,7 +171,7 @@ class TE(object):
         data = json.dumps(request)
         curr_file = {
             'request': data,
-            'file': open(self.full_path, 'rb')
+            'file': open(str(self.full_path), 'rb')
         }
         self.print("Sending Upload request of te and te_eb")
         try:
@@ -243,13 +245,13 @@ class TE(object):
             response = requests.get(url=self.url + "download?id=" + self.report_id, verify=False)
             encoded_content_string = response.text
             decoded_content = base64.b64decode(encoded_content_string)
-            decoded_report_archive_path = os.path.join(self.reports_directory, self.sub_dir, self.file_name + ".report.tar.gz")
+            decoded_report_archive_path = self.reports_directory / self.sub_dir / (self.file_name + ".report.tar.gz")
             
             # Ensure the directory for the report exists
-            os.makedirs(os.path.dirname(decoded_report_archive_path), exist_ok=True)
+            decoded_report_archive_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Write the content to the file
-            with open(decoded_report_archive_path, "wb") as decoded_report_archive_file:
+            with open(str(decoded_report_archive_path), "wb") as decoded_report_archive_file:
                 decoded_report_archive_file.write(decoded_content)
             
             self.print("TE report downloaded to: {}".format(decoded_report_archive_path))
@@ -299,16 +301,17 @@ class TE(object):
     def move_file(self, destination_directory):
         """
         Move the file from its current location to the specified destination directory.
+        Uses PathHandler for cross-platform and network path support.
         :param destination_directory: The directory to which the file should be moved.
         """
         current_location = self.full_path
-        destination_path = os.path.join(destination_directory, self.sub_dir)
-        destination_location = os.path.join(destination_directory, self.sub_dir, self.file_name)
-        os.makedirs(destination_path, exist_ok=True)
-    
-        try:
-            os.rename(current_location, destination_location)
-            self.print(f"File {self.file_name} moved to: {destination_location}")
-        except Exception as e:
-            self.print(f"Failed to move file {self.file_name}. Error: {str(e)}")
+        destination_location = destination_directory / self.sub_dir / self.file_name
+        
+        # Use PathHandler for safe, cross-platform move with retry logic
+        success, message = PathHandler.safe_move(current_location, destination_location)
+        
+        if success:
+            self.print(message)
+        else:
+            self.print(f"Failed to move file {self.file_name}. {message}")
 
