@@ -16,7 +16,7 @@ from typing import Tuple, Optional
 
 
 class PathHandler:
-    """
+    r"""
     Centralized path handling with platform-specific support for:
     - Windows UNC paths (\\server\share)
     - Linux SMB mounts (/mnt/smbshare)
@@ -66,7 +66,7 @@ class PathHandler:
     
     @staticmethod
     def is_unc_path(path: Path) -> bool:
-        """
+        r"""
         Check if path is a Windows UNC path (\\server\share).
         
         Args:
@@ -80,7 +80,7 @@ class PathHandler:
     
     @staticmethod
     def is_smb_path(path: Path) -> bool:
-        """
+        r"""
         Detect if path is an SMB/network path.
         - Windows: UNC paths (\\server\share)
         - Linux: Common SMB mount points (/mnt, /media, /net)
