@@ -31,6 +31,7 @@ import argparse
 import multiprocessing
 import datetime
 from pathlib import Path
+from functools import partial
 
 # =======================
 # Main entry point
@@ -138,12 +139,11 @@ def main():
     # Non-archive files: parallel processing
     if len(other_files) > 0:
         print(f"\nProcessing {len(other_files)} non-archive files with concurrency={config.concurrency}")
-        # Create partial function with config baked in
-        def process_with_config(file_name, sub_dir, full_path):
-            return process_files(file_name, sub_dir, full_path, config, url)
+        # Use partial to bind config and url parameters (works with multiprocessing pickle)
+        process_func = partial(process_files, config=config, url=url)
         
         with multiprocessing.Pool(config.concurrency) as pool:
-            pool.starmap(process_with_config, other_files)
+            pool.starmap(process_func, other_files)
 
     # Archive files: sequential processing
     if len(archive_files) > 0:
