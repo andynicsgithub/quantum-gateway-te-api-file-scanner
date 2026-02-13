@@ -2,13 +2,6 @@
 
 **Current Version:** v6.3.6 (Stable Release)
 
-> **📢 Note:** A new cross-platform version (v7.0) with Windows and SMB support is currently in testing on the `v7.0-dev` branch. To use the latest development version:
-> ```bash
-> git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.git
-> cd quantum-gateway-te-api-file-scanner
-> git checkout v7.0-dev
-> ```
-> See [BRANCH_INFO.md](https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner/blob/v7.0-dev/BRANCH_INFO.md) on the dev branch for details.
 
 ---
 
