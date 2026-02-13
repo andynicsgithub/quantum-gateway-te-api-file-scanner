@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v6.3
+te_file_handler v6.3.6
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload

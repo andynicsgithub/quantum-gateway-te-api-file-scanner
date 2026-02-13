@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v6.3
+te_api v6.3.6
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
