@@ -38,11 +38,19 @@ git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.
 # Enter the directory
 cd quantum-gateway-te-api-file-scanner
 
+# Switch to development branch (v7.0 Phase 1)
+git checkout v7.0-dev
+
+# Verify you're on the correct branch
+git branch
+
 # Verify files are present
 dir
 ```
 
-**Expected output:** You should see:
+**Expected output:** 
+- Current branch should be `v7.0-dev`
+- You should see:
 - `te_api.py`
 - `te_file_handler.py`
 - `path_handler.py`

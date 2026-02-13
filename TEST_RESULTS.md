@@ -210,7 +210,20 @@ The code is ready for:
 
 ---
 
-## Current Status (February 11, 2026 - End of Day)
+## Current Status (February 13, 2026)
+
+### 🔀 Repository Structure
+
+**Branch Organization:**
+- `main` branch → v6.3.6 (stable, production-ready)
+- `v7.0-dev` branch → Phase 1 work (in development)
+
+**Why the separation?**
+To prevent users from cloning incomplete v7.0 code, the v7.0 Phase 1 work has been moved to the `v7.0-dev` branch. The `main` branch remains at the last stable release (v6.3.6) until v7.0 testing is complete.
+
+---
+
+## Testing Progress (February 11-13, 2026)
 
 ### ✅ Completed Today
 1. **Phase 1 Implementation** - All code complete and committed

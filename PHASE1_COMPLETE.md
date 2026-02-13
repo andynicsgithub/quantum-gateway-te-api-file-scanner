@@ -284,7 +284,10 @@ If you encounter any problems during testing:
 
 ---
 
-## Current Status (Updated: February 11, 2026)
+## Current Status (Updated: February 13, 2026)
+
+**Branch**: `v7.0-dev` (development branch)  
+**Stable Release**: `main` branch at v6.3.6
 
 **Phase 1 Implementation**: ✅ **COMPLETE**
 
@@ -303,14 +306,16 @@ If you encounter any problems during testing:
 - [ ] Verify file locking retry logic
 - [ ] Test with actual TE appliance
 
-**Git Repository**: ✅ **SYNCHRONIZED**
-- Commits pushed: v7.0, docstring fixes, test results
-- Branch: main
-- Latest commit: fb7ff4d
+**Git Repository**: ✅ **REORGANIZED**
+- Development branch: `v7.0-dev` (contains Phase 1 work)
+- Stable branch: `main` (v6.3.6)
+- Latest commit on v7.0-dev: 1385499
+- Users cloning from main get stable v6.3.6
 
 **Next Steps**:
-1. ⏳ Clone repo on Windows machines
+1. ⏳ Clone `v7.0-dev` branch on Windows machines
 2. ⏳ Install Python and dependencies on Windows
 3. ⏳ Run Windows-specific tests
 4. ⏳ Test with real TE appliance (both platforms)
-5. ⏸️ Proceed to Phase 2 (watch mode) after validation
+5. ⏳ Merge `v7.0-dev` → `main` when testing complete
+6. ⏸️ Proceed to Phase 2 (watch mode) after v7.0 release
