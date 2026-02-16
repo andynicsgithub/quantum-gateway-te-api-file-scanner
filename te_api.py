@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v6.3.6
+te_api v7.0
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -9,41 +9,29 @@ Features:
   - Store results in an output directory
   - Support concurrent processing of multiple files (via command line argument or config.ini)
   - Move files from source directory to benign_directory, quarantine_directory, or error_directory based on TE verdict
+  - Cross-platform support (Linux and Windows)
+  - SMB/UNC network path support with retry logic
 
-Changes in v6.3 over v6.2:
-  1. Recursively traverses input_directory to detect all files and subdirectories.
-  2. Separates archive files from other files; archives are processed sequentially.
-  3. Moves processed files into:
-    - benign_directory for files with 'Benign' verdict
-    - quarantine_directory for files with 'Malicious' verdict
-    - error_directory for files that fail scanning or uploading
-  4. Preserves subdirectory structure when moving files and storing TE reports.
-  5. Deletes empty subdirectories in the input directory after processing.
-  6. Supports concurrency for non-archive files using multiprocessing.
-  7. Reads configuration from 'config.ini', command-line arguments override config values.
-  8. Default concurrency is 4 if not specified.
+Changes in v7.0 over v6.3:
+  1. Complete refactoring for cross-platform support (Windows and Linux)
+  2. Added PathHandler for robust file operations across filesystems and network paths
+  3. Replaced os.rename() with shutil.move() + retry logic for Windows and SMB compatibility
+  4. Added ConfigManager for type-safe configuration with validation
+  5. Support for Windows UNC paths (\\\\server\\share) and Linux SMB mounts
+  6. Added checksum verification for files moved over network paths
+  7. Improved error handling with platform-specific guidance
+  8. Foundation for watch mode (Phase 2)
 """
 
 from te_file_handler import TE
+from config_manager import ScannerConfig
+from path_handler import PathHandler
 import os
 import argparse
 import multiprocessing
-import zipfile
-import configparser
 import datetime
-import json
-
-# These variables can be assigned and used instead of adding them as arguments or in config.ini 
-#  when running te_api.py .
-# These variables are overridden by those assigned in config.ini. These and config.ini values
-#  can be overridden at run-time by command-line arguments.
-
-input_directory = "input_files"
-reports_directory = "te_response_data"
-appliance_ip = ""
-benign_directory = ""
-quarantine_directory = ""
-error_directory = ""
+from pathlib import Path
+from functools import partial
 
 # =======================
 # Main entry point
@@ -51,141 +39,80 @@ error_directory = ""
 
 def main():
     """
-	MAIN ENTRY POINT
-    1. Get the optional arguments (if any): the input-directory, the output-directory and appliance-ip.
-    2. Accordingly set the api-url, and create the output directory.
-    3. Go though all input files in the input directory.
-        Handling each input file is described in TE class in te_file_handler.py:
+    MAIN ENTRY POINT
+    1. Parse command-line arguments
+    2. Load configuration from file/env/cli with proper precedence
+    3. Validate configuration and create directories
+    4. Set API URL and discover files
+    5. Process files (archives sequentially, others in parallel)
+    6. Clean up empty directories
     """
-    global input_directory
-    global reports_directory
-    global appliance_ip
-    global benign_directory
-    global quarantine_directory
-    global error_directory
-    global concurrency
-    global url
-    # Set a default value for concurrency in case something goes wrong
-    concurrency = 4  # Change this to your desired default
-
     # =======================
-    # Read configuration file
+    # Parse CLI Arguments
     # =======================
-
-    # Create a ConfigParser object
-    config = configparser.ConfigParser()
-    # Read the configuration from 'config.ini'
-    config.read('config.ini')
-
-    # Use the values from the configuration file if they exist
-    if 'DEFAULT' in config:
-        if 'input_directory' in config['DEFAULT']:
-            input_directory = config['DEFAULT']['input_directory']
-        if 'reports_directory' in config['DEFAULT']:
-            reports_directory = config['DEFAULT']['reports_directory']
-        if 'appliance_ip' in config['DEFAULT']:
-            appliance_ip = config['DEFAULT']['appliance_ip']
-        if 'benign_directory' in config['DEFAULT']:
-            benign_directory = config['DEFAULT']['benign_directory']
-        if 'quarantine_directory' in config['DEFAULT']:
-            quarantine_directory = config['DEFAULT']['quarantine_directory']
-        if 'error_directory' in config['DEFAULT']:
-            error_directory = config['DEFAULT']['error_directory']
-        if 'concurrency' in config['DEFAULT']:
-            concurrency = int(config['DEFAULT']['concurrency'])
     
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description='TE API Scanner - Cross-platform threat emulation file scanner'
+    )
     parser.add_argument("-in", "--input_directory", help="the input files folder to be scanned by TE")
     parser.add_argument("-rep", "--reports_directory", help="the output folder with TE results")
     parser.add_argument("-ip", "--appliance_ip", help="the appliance ip address")
-    parser.add_argument('-n', '--concurrency', type=int, help='Number of concurrent loops')
+    parser.add_argument('-n', '--concurrency', type=int, help='Number of concurrent file processes')
     parser.add_argument('-out', '--benign_directory', help='the directory to move Benign files after scanning')
     parser.add_argument('-jail', '--quarantine_directory', help='the directory to move Malicious files after scanning')
     parser.add_argument('-error', '--error_directory', help='the directory to move files which cause a scanning error')
+    parser.add_argument('--watch', action='store_true', help='Watch mode: monitor directory for new files (Phase 2)')
     args = parser.parse_args()
     
-    if args.input_directory:
-        input_directory = args.input_directory
-    print("The input files directory to be scanned by TE : {}".format(input_directory))
-    if not os.path.exists(input_directory):
-        print("\n\n  --> The input files directory {} does not exist !\n\n".format(input_directory))
-        parser.print_help()
-        return
-		
-    # ============================
-    # Check and Create Directories
-    # ============================
-	
-    if args.reports_directory:
-        reports_directory = args.reports_directory
-    print("The output directory with TE results : {}".format(reports_directory))
-    if not os.path.exists(reports_directory):
-        print("Pre-processing: creating te_api output directory {}".format(reports_directory))
-        try:
-            os.mkdir(reports_directory)
-        except Exception as E1:
-            print("could not create te_api output directory, because: {}".format(E1))
-            return
-
-    if args.appliance_ip:
-        appliance_ip = args.appliance_ip
-
-    if not appliance_ip:
-        print("\n\n  --> Missing appliance_ip !\n\n")
-        parser.print_help()
-        return
-    print("The appliance ip address : {}".format(appliance_ip))
-    url = "https://" + appliance_ip + ":18194/tecloud/api/v1/file/"
-    if args.benign_directory:
-        benign_directory = args.benign_directory
-    print("The output directory for Benign files: {}".format(benign_directory))
-    if not os.path.exists(benign_directory):
-        print("Pre-processing: creating Benign directory {}".format(benign_directory))
-        try:
-            os.mkdir(benign_directory)
-        except Exception as E1:
-            print("could not create Benign directory because: {}".format(E1))
-            return
-
-    if args.quarantine_directory:
-        quarantine_directory = args.quarantine_directory
-    if not os.path.exists(quarantine_directory):
-        print("Pre-processing: creating Benign directory {}".format(quarantine_directory))
-        try:
-            os.mkdir(quarantine_directory)
-        except Exception as E1:
-            print("could not create Quarantine directory because: {}".format(E1))
-            return
-    print("The output directory for Malicious files: {}".format(quarantine_directory))
- 
-    if args.error_directory:
-        error_directory = args.error_directory
-    if not os.path.exists(error_directory):
-        print("Pre-processing: creating Benign directory {}".format(error_directory))
-        try:
-            os.mkdir(error_directory)
-        except Exception as E1:
-            print("could not create error directory because: {}".format(E1))
-            return
-    print("The output directory for Error files: {}".format(error_directory))
- 
-    if args.concurrency:
-        concurrency = args.concurrency
+    # =======================
+    # Load and Validate Config
+    # =======================
     
-    print("Parallel processing of {} files at once".format(concurrency))
-	
+    print("TE API Scanner v7.0 - Loading configuration...")
+    config = ScannerConfig.from_sources(config_file='config.ini', cli_args=args)
+    
+    # Display configuration summary
+    config.print_summary()
+    print()
+    
+    # Validate configuration
+    is_valid, errors = config.validate()
+    if not is_valid:
+        print("\n==> Configuration validation failed:")
+        for error in errors:
+            print(f"  ERROR: {error}")
+        print()
+        parser.print_help()
+        return 1
+    
+    print("Configuration validated successfully.\n")
+    
+    # Build API URL
+    url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/"
+    
+    # Warn about Windows long path support if applicable
+    if PathHandler.is_windows() and not PathHandler.supports_long_paths():
+        print("WARNING: Windows long path support is not enabled.")
+        print("         Paths over 260 characters may fail.")
+        print("         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation\n")
+    
+    print(f"Parallel processing of {config.concurrency} files at once")
+    
+    # =======================
+    # File Discovery
+    # =======================
+    
     # Identify archive vs other files
-    
     archive_extensions = [".7z", ".arj", ".bz2", ".CAB", ".dmg", ".gz", ".img", ".iso", ".msi", ".pkg", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
 
     archive_files = set()
     other_files = set()
 
     # Recursively walk through input_directory
-    
-    for root, dirs, files in os.walk(input_directory):
+    print(f"Scanning input directory: {config.input_directory}")
+    for root, dirs, files in os.walk(str(config.input_directory)):
         # Extract the subdirectory relative to the input_directory
-        sub_dir = os.path.relpath(root, input_directory)
+        sub_dir = os.path.relpath(root, config.input_directory)
         for file in files:
             full_path = os.path.join(root, file)
             file_nameonly, file_extension = os.path.splitext(file)
@@ -198,29 +125,38 @@ def main():
             else:
                 other_files.add(file_info)
             
-    print("Begin handling input files by TE")
-    # Print out the number of archive and non-archive files
-    print("There are {} archive files and {} non-archive files".format(len(archive_files), len(other_files)))
-    # Print out the contents of other_files
-    for file_info in other_files:
-        file, sub_dir, full_path = file_info
-        print(f"File: {file}, Subdirectory: {sub_dir}, Full Path: {full_path}")
+    print("\nBegin handling input files by TE")
+    print(f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files")
+    
+    if len(other_files) == 0 and len(archive_files) == 0:
+        print("No files to process. Exiting.")
+        return 0
     
     # =======================
     # Process files
     # =======================
 
     # Non-archive files: parallel processing
-    print(f"Value of concurrency before parallel processing: {concurrency}")
-    with multiprocessing.Pool(concurrency) as pool:
-        pool.starmap(process_files, other_files)
+    if len(other_files) > 0:
+        print(f"\nProcessing {len(other_files)} non-archive files with concurrency={config.concurrency}")
+        # Use partial to bind config and url parameters (works with multiprocessing pickle)
+        process_func = partial(process_files, config=config, url=url)
+        
+        with multiprocessing.Pool(config.concurrency) as pool:
+            pool.starmap(process_func, other_files)
 
     # Archive files: sequential processing
-    for file_info in archive_files:
-        process_files(*file_info)
+    if len(archive_files) > 0:
+        print(f"\nProcessing {len(archive_files)} archive files sequentially")
+        for file_info in archive_files:
+            process_files(*file_info, config, url)
 
     # Delete empty sub-directories
-    find_and_delete_empty_subdirectories(input_directory)
+    print(f"\nCleaning up empty subdirectories in {config.input_directory}")
+    find_and_delete_empty_subdirectories(config.input_directory)
+    
+    print("\n==> Processing complete!")
+    return 0
 
 
 # =======================
@@ -246,17 +182,38 @@ def find_and_delete_empty_subdirectories(input_directory):
                     print(f"Error deleting directory {dir_path}: {str(e)}")
 
 def print_with_timestamp(message, variable):
+    """Print message with timestamp."""
     now = datetime.datetime.now()
     timestamp = now.strftime("%H:%M:%S.%f")
     print("{} - {}".format(timestamp, message.format(variable)))
 
-def process_files(file_name, sub_dir, full_path):
+def process_files(file_name, sub_dir, full_path, config, url):
+    """
+    Process a single file through the TE API.
+    
+    Args:
+        file_name: Name of the file
+        sub_dir: Subdirectory relative to input_directory
+        full_path: Full path to the file
+        config: ScannerConfig object
+        url: TE API URL
+    """
     try:
-        print_with_timestamp("Handling file: {} by TE",file_name)
-        te = TE(url, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory)
+        print_with_timestamp("Handling file: {} by TE", file_name)
+        te = TE(
+            url, 
+            file_name, 
+            sub_dir, 
+            full_path, 
+            config.input_directory,
+            config.reports_directory, 
+            config.benign_directory, 
+            config.quarantine_directory, 
+            config.error_directory
+        )
         te.handle_file()
     except Exception as E:
         print("Could not handle file: {} because: {}. Continue to handle the next file.".format(file_name, E))
 
 if __name__ == '__main__':
-    main()
+    exit(main())
