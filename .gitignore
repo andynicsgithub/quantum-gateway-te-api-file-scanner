@@ -3,3 +3,9 @@ config.ini
 
 # Keep the template
 # config.ini.default
+
+# Internal planning and testing documentation (keep locally, not in public repo)
+BRANCH_INFO.md
+PHASE1_COMPLETE.md
+TEST_RESULTS.md
+WINDOWS_TESTING_GUIDE.md
