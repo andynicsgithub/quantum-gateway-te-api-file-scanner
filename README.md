@@ -17,7 +17,7 @@ Files will be moved from the source or "input" directory to one of the following
 
 Normal files, i.e. files that are not archives, will be processed in a parallel fashion. Change the "concurrency" value to suit the capacity of your environment to avoid overloading or slowing down the processing of files from other sources.
 
-Archive files are expanded when they reach the Threat Emulation appliance and all files within them are analysed. This can lead to very large numbers of files being processed at once, so this application sends archive files one at a time after the normal files. If one or more files in the archive are found malicious, the whole parent archive file is marked as malicious, and moved to the quarantine directory.
+Archive files are expanded the Threat Emulation and all files within them are analysed. This can lead to very large numbers of files being processed at once, so this application sends archive files one at a time after the normal files. If one or more files in the archive are found malicious, the whole parent archive file is marked as malicious, and moved to the quarantine directory.
 
 Note that this utility will move (not copy) all files from the input directory to the output directories, leaving the input directory empty.
 
@@ -57,7 +57,7 @@ For each file:
 
 ### Prerequisites
 - Python 3.7 or higher
-- Network access to Check Point Threat Emulation appliance
+- Network access to Check Point API-enabled appliance
 
 ### Install Dependencies
 
@@ -226,8 +226,3 @@ sudo mount -t cifs //server/share /mnt/smbshare -o username=user,password=pass
 ```
 
 **Permissions:** Ensure the user running the scanner has read/write permissions on all directories.
-
-
-### References
-* Additional Threat Emulation API info: [sk167161](https://supportcenter.checkpoint.com/supportcenter/portal?eventSubmit_doGoviewsolutiondetails=&solutionid=sk167161)
-* te_eb feature: [sk117168 chapter 4](https://supportcenter.checkpoint.com/supportcenter/portal?eventSubmit_doGoviewsolutiondetails=&solutionid=sk117168#New%20Public%20API%20Interface)
