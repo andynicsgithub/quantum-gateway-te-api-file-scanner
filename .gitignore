@@ -9,3 +9,9 @@ BRANCH_INFO.md
 PHASE1_COMPLETE.md
 TEST_RESULTS.md
 WINDOWS_TESTING_GUIDE.md
+
+# Python cache
+__pycache__/
+
+# Test input files
+test_input/
