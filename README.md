@@ -9,28 +9,25 @@ Files will be moved from the source or "input" directory to one of the following
 - Benign files will be moved to the "benign" directory.
 - Malicious files will be moved to the "quarantine" directory.
 - Files that can't be correctly processed will be moved to the "error" directory.
+- Transcripts of the API session for each file are saved in the "reports" directory.
+- For any file found to be malicious, the Threat Emulation report is also downloaded and saved in the "reports" directory.
+- UNC paths are supported, so this application may be used as part of a secure transfer methodology, e.g. set the "benign" directory to be \\192.168.1.2\share to ensure that only safe files are transferred to the destination.
+- All files are processed using the Check Point recommended OS versions for maximum detection rate. At the moment, no custom choice of OS versions is possible in the application.
 
-Logs for all files plus reports for malicious files will be downloaded and placed in the "reports" directory.
 
 Normal files, i.e. files that are not archives, will be processed in a parallel fashion. Change the "concurrency" value to suit the capacity of your environment to avoid overloading or slowing down the processing of files from other sources.
 
-If processed in an on-premises Threat Emulation appliance, archives are expanded and all files within them are analysed. This can lead to very large numbers of files being processed at once, so archive files are processed one at a time after the normal files. If one or more files in the archive are found malicious, the parent archive file is marked as malicious.
+Archive files are expanded when they reach the Threat Emulation appliance and all files within them are analysed. This can lead to very large numbers of files being processed at once, so this application sends archive files one at a time after the normal files. If one or more files in the archive are found malicious, the whole parent archive file is marked as malicious, and moved to the quarantine directory.
 
-Note that this utility will move files from the input directory to the output directories, leaving the input directory empty.
-If your use case requires that benign files be left in the input directory and only malicious files be moved to the quarantine, a different approach is needed.
+Note that this utility will move (not copy) all files from the input directory to the output directories, leaving the input directory empty.
+
 
 ## Platform Support
 
 **Supported Platforms:**
-- ✅ Linux (tested on Ubuntu, RHEL, CentOS)
-- ✅ Windows (Windows 10/11, Server 2016+)
+- ✅ Linux (tested on Ubuntu)
+- ✅ Windows (Windows 10/11)
 
-**Network Path Support:**
-- ✅ Windows UNC paths: `\\server\share\folder`
-- ✅ Linux SMB mounts: `/mnt/smbshare/folder`
-- ✅ Cross-filesystem moves (e.g., Windows D:\ to E:\)
-- ✅ Automatic retry logic for network latency
-- ✅ Checksum verification for network file transfers
 
 ### The flow
 Going through the input directory and handling each file in order to get its Threat Emulation results.
@@ -107,8 +104,6 @@ error_directory = C:\Scans\Errors
 concurrency = 2
 ```
 
-**Note for Windows:** Use either backslashes `C:\path` or forward slashes `C:/path`. UNC paths are fully supported: `\\server\share\folder`
-
 ### Method 2: Environment Variables
 
 Set environment variables with `TE_` prefix:
@@ -129,7 +124,7 @@ $env:TE_CONCURRENCY=2
 
 ### Method 3: Command-Line Arguments
 
-Command-line arguments override both config file and environment variables:
+Command-line arguments override both config file and environment variables. This is useful if you want to use the application to process a few files in a different way on an occasional basis. To see the command structure and arguments, run:
 
 ```bash
 python te_api.py --help
@@ -231,30 +226,6 @@ sudo mount -t cifs //server/share /mnt/smbshare -o username=user,password=pass
 ```
 
 **Permissions:** Ensure the user running the scanner has read/write permissions on all directories.
-
-## Troubleshooting
-
-### Common Issues
-
-**1. "Permission denied" errors on Windows**
-- File may be locked by antivirus or another process
-- Scanner will automatically retry (up to 3 attempts)
-- Check Windows Defender exclusions if persistent
-
-**2. Slow performance on network paths**
-- SMB/UNC paths are slower than local paths
-- Reduce concurrency for network paths
-- Consider using local temp storage for processing
-
-**3. "Path does not exist" on Windows UNC**
-- Ensure network share is accessible: `dir \\server\share`
-- Check firewall settings
-- Verify credentials have access to the share
-
-**4. Configuration validation failed**
-- Check all required fields are set (especially `appliance_ip`)
-- Verify paths exist and are accessible
-- Review error messages for specific issues
 
 
 ### References
