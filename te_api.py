@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v7.0
+te_api v7.01
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -12,7 +12,7 @@ Features:
   - Cross-platform support (Linux and Windows)
   - SMB/UNC network path support with retry logic
 
-Changes in v7.0 over v6.3:
+Changes in v7.01 over v6.3:
   1. Complete refactoring for cross-platform support (Windows and Linux)
   2. Added PathHandler for robust file operations across filesystems and network paths
   3. Replaced os.rename() with shutil.move() + retry logic for Windows and SMB compatibility
@@ -68,7 +68,7 @@ def main():
     # Load and Validate Config
     # =======================
     
-    print("TE API Scanner v7.0 - Loading configuration...")
+    print("TE API Scanner v7.01 - Loading configuration...")
     config = ScannerConfig.from_sources(config_file='config.ini', cli_args=args)
     
     # Display configuration summary
