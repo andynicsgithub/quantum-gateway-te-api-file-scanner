@@ -141,6 +141,30 @@ function Remove-FilesSecurely {
     return $fileCount
 }
 
+function Remove-EmptyDirectories {
+    param(
+        [string]$RootDir
+    )
+    
+    if (-not (Test-Path $RootDir)) {
+        return
+    }
+    
+    # Remove directories only if they are empty (children first)
+    $dirs = Get-ChildItem -Path $RootDir -Directory -Recurse | Sort-Object FullName -Descending
+    foreach ($dir in $dirs) {
+        try {
+            if ((Get-ChildItem -Path $dir.FullName -Force | Measure-Object).Count -eq 0) {
+                Remove-Item -Path $dir.FullName -Force -Recurse
+                Write-Host "    Removed empty directory: $($dir.FullName)"
+            }
+        }
+        catch {
+            Write-Warning "Failed to remove directory $($dir.FullName): $_"
+        }
+    }
+}
+
 # =======================
 # Main Script
 # =======================
@@ -238,6 +262,14 @@ if ($moved -ge 0) {
     Write-Host "  Total moved: $moved files"
     $totalMoved += $moved
 }
+Write-Host ""
+
+# Remove any empty subdirectories from the output locations
+Write-Host "Cleaning up empty directories in output locations..."
+Remove-EmptyDirectories -RootDir $benignDir
+Remove-EmptyDirectories -RootDir $quarantineDir
+Remove-EmptyDirectories -RootDir $errorDir
+Remove-EmptyDirectories -RootDir $reportsDir
 Write-Host ""
 
 # Permanently delete remaining files from reports directory
