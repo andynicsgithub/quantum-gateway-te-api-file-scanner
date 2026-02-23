@@ -104,25 +104,7 @@ error_directory = C:\Scans\Errors
 concurrency = 2
 ```
 
-### Method 2: Environment Variables
-
-Set environment variables with `TE_` prefix:
-
-**Linux:**
-```bash
-export TE_INPUT_DIRECTORY=/data/incoming
-export TE_APPLIANCE_IP=192.168.1.100
-export TE_CONCURRENCY=4
-```
-
-**Windows:**
-```powershell
-$env:TE_INPUT_DIRECTORY="C:\Scans\Input"
-$env:TE_APPLIANCE_IP="192.168.1.100"
-$env:TE_CONCURRENCY=2
-```
-
-### Method 3: Command-Line Arguments
+### Method 2: Command-Line Arguments
 
 Command-line arguments override both config file and environment variables. This is useful if you want to use the application to process a few files in a different way on an occasional basis. To see the command structure and arguments, run:
 
