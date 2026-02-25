@@ -1,0 +1,59 @@
+{
+    "response": [
+        {
+            "features": [
+                "te",
+                "te_eb"
+            ],
+            "file_type": "endpointdlp",
+            "md5": "1d31e99277d294ce1aaea3d71632d3e4",
+            "sha1": "95f9c9835462b6f37fbfd96e881dbd72640bfc5a",
+            "sha256": "8b7f72d3cc37881a6c4769fc9b2914c748cfa117466ca059aed37a7d4b114fc5",
+            "status": {
+                "code": 1001,
+                "label": "FOUND",
+                "message": "We have found your request"
+            },
+            "te": {
+                "combined_verdict": "Benign",
+                "confidence": 0,
+                "images": [
+                    {
+                        "id": "5e5de275-a103-4f67-b55b-47532918fa59",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    },
+                    {
+                        "id": "e50e99f3-5963-4573-af9e-e3f4750b55e2",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    }
+                ],
+                "score": -2147483648,
+                "severity": 0,
+                "status": {
+                    "code": 1001,
+                    "label": "FOUND",
+                    "message": "We have found your request"
+                },
+                "summary_report": ""
+            },
+            "te_eb": {
+                "combined_verdict": "Benign",
+                "confidence": 0,
+                "severity": 0,
+                "status": {
+                    "code": 1001,
+                    "label": "FOUND",
+                    "message": "We have found your request"
+                }
+            }
+        }
+    ]
+}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v6.3.6
+te_file_handler v8.0
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
@@ -65,6 +65,10 @@ class TE(object):
     def __init__(self, url, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory):
         self.url = url
         self.file_name = file_name
+        self.original_name = file_name
+        # compute a safe name to send to the TE API; stored separately so
+        # we can always refer to the original when moving/printing
+        self.api_name = PathHandler.sanitize_filename(file_name)
         self.sub_dir = sub_dir
         # Convert to Path objects for cross-platform compatibility
         self.full_path = Path(full_path) if not isinstance(full_path, Path) else full_path
@@ -169,9 +173,11 @@ class TE(object):
         """
         request = copy.deepcopy(self.request_template)
         data = json.dumps(request)
+        # pass sanitized filename as the form filename so the appliance
+        # never sees non-UTF-8 or space-containing names
         curr_file = {
             'request': data,
-            'file': open(str(self.full_path), 'rb')
+            'file': (self.api_name, open(str(self.full_path), 'rb'))
         }
         self.print("Sending Upload request of te and te_eb")
         try:

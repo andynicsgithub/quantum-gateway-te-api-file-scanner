@@ -1,8 +1,12 @@
 # te_api
 
+**Version 8.0** - adds filename sanitisation when talking to the API; preserves original names on disk
+
 **Version 7.0** - Cross-platform Python client for Check Point Threat Emulation API
 
 A Python client side utility for using Threat Emulation API calls to an on-premises Check Point gateway (or Threat Emulation appliance). **Now with full Windows and Linux support, including SMB/UNC network paths.**
+
+Starting in version 8.0 the scanner will accept files whose names contain arbitrary bytes; names are encoded to a UTF‑8‑safe, space‑free form when sent to the API and decoded back when results are handled.  This allows processing of files that the appliance itself would otherwise reject.
 
 The utility will parse a directory tree, and use the Threat Emulation API to scan the files.
 Files will be moved from the source or "input" directory to one of the following directories:

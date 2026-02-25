@@ -1,0 +1,70 @@
+{
+    "response": [
+        {
+            "features": [
+                "te",
+                "te_eb"
+            ],
+            "file_type": "xlsx",
+            "md5": "b81c7fb9127ac43fa253924d2f7cc918",
+            "sha1": "e90335c3958d2a4275569a33501561fa32680c65",
+            "sha256": "f071004d5cb0c4591f26b7cf9270e794e0af5bbaf817eb3b1841ebad6465f452",
+            "status": {
+                "code": 1001,
+                "label": "FOUND",
+                "message": "We have found your request"
+            },
+            "te": {
+                "blob": {
+                    "embedded_data": {
+                        "classified_as_zip": false,
+                        "contains_embedded_files": false,
+                        "contains_macro_and_code": false,
+                        "contains_sensitive_links": false,
+                        "embedded_file_types": [],
+                        "is_file_encrypted": false,
+                        "scrubbed_content": []
+                    }
+                },
+                "combined_verdict": "Benign",
+                "confidence": 0,
+                "images": [
+                    {
+                        "id": "5e5de275-a103-4f67-b55b-47532918fa59",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    },
+                    {
+                        "id": "e50e99f3-5963-4573-af9e-e3f4750b55e2",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    }
+                ],
+                "score": -2147483648,
+                "severity": 0,
+                "status": {
+                    "code": 1001,
+                    "label": "FOUND",
+                    "message": "We have found your request"
+                },
+                "summary_report": ""
+            },
+            "te_eb": {
+                "combined_verdict": "Benign",
+                "confidence": 0,
+                "severity": 0,
+                "status": {
+                    "code": 1001,
+                    "label": "FOUND",
+                    "message": "We have found your request"
+                }
+            }
+        }
+    ]
+}

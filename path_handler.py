@@ -12,7 +12,13 @@ import time
 import shutil
 import hashlib
 from pathlib import Path, PureWindowsPath, PurePosixPath
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Dict
+import urllib.parse
+import hashlib
+
+# mapping from API-safe names back to originals (process-local)
+_api_name_map: Dict[str, str] = {}
+
 
 
 class PathHandler:
@@ -272,6 +278,37 @@ class PathHandler:
         
         return False, f"Failed to move file after {retry_count} attempts: {last_error}"
     
+    @staticmethod
+    # ------------------------------------------------------------------
+    # Filename sanitization for API
+    # ------------------------------------------------------------------
+    @staticmethod
+    def sanitize_filename(name: str) -> str:
+        """
+        Encode a filename to a UTF-8-safe, space-free string suitable for the
+        TE API.  The original name is stored in a mapping so responses can be
+        translated back.
+
+        Uses percent-encoding; if a collision with an existing safe name
+        occurs the SHA1 of the original is appended to guarantee uniqueness.
+        """
+        # percent-encode all characters (result is pure ASCII)
+        safe = urllib.parse.quote(name, safe='')
+        # handle collisions where different originals map to the same string
+        if safe in _api_name_map and _api_name_map[safe] != name:
+            suffix = hashlib.sha1(name.encode('utf-8')).hexdigest()[:8]
+            safe = f"{safe}_{suffix}"
+        _api_name_map[safe] = name
+        return safe
+
+    @staticmethod
+    def desanitize_filename(safe: str) -> str:
+        """
+        Reverse of :py:meth:`sanitize_filename`; if an explicit mapping exists
+        it is returned, otherwise the percent-encoding is simply unquoted.
+        """
+        return _api_name_map.get(safe, urllib.parse.unquote(safe))
+
     @staticmethod
     def _calculate_sha1(file_path: Path) -> str:
         """
