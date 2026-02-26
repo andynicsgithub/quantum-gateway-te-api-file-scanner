@@ -3,3 +3,9 @@ config.ini
 
 # Keep the template
 # config.ini.default
+test_benign/
+test_error/
+test_input/
+test_quarantine/
+test_reports/
+venv/
