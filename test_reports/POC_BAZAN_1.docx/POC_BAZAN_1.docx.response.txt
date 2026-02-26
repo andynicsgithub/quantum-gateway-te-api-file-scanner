@@ -1,0 +1,59 @@
+{
+    "response": [
+        {
+            "features": [
+                "te"
+            ],
+            "file_type": "docx",
+            "md5": "0cc0a233f05e6edefa251996eada418e",
+            "sha1": "31c79693914538f3894393488234ac23373543eb",
+            "sha256": "e2567bb3a686ad10e710cacb14d9e3037a2b78762ab498142393bf21371e3bdf",
+            "status": {
+                "code": 1001,
+                "label": "FOUND",
+                "message": "We have found your request"
+            },
+            "te": {
+                "blob": {
+                    "embedded_data": {
+                        "classified_as_zip": false,
+                        "contains_embedded_files": false,
+                        "contains_macro_and_code": false,
+                        "contains_sensitive_links": false,
+                        "embedded_file_types": [],
+                        "is_file_encrypted": false,
+                        "scrubbed_content": []
+                    }
+                },
+                "combined_verdict": "Benign",
+                "confidence": 0,
+                "images": [
+                    {
+                        "id": "5e5de275-a103-4f67-b55b-47532918fa59",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    },
+                    {
+                        "id": "e50e99f3-5963-4573-af9e-e3f4750b55e2",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    }
+                ],
+                "score": -2147483648,
+                "severity": 0,
+                "status": {
+                    "code": 1001,
+                    "label": "FOUND",
+                    "message": "We have found your request"
+                },
+                "summary_report": ""
+            }
+        }
+    ]
+}

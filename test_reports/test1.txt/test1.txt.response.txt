@@ -1,0 +1,48 @@
+{
+    "response": [
+        {
+            "features": [
+                "te"
+            ],
+            "file_type": "txt",
+            "md5": "68b22040025784da775f55cfcb6dee2e",
+            "sha1": "5e2bd4918bd3bf0a32be16ea85c74d52bfa27cc3",
+            "sha256": "670b9578b93e00ce8790429c504e35bb306377172fcd8dfac2ac27c86e45a109",
+            "status": {
+                "code": 1001,
+                "label": "FOUND",
+                "message": "We have found your request"
+            },
+            "te": {
+                "combined_verdict": "Benign",
+                "confidence": 0,
+                "images": [
+                    {
+                        "id": "5e5de275-a103-4f67-b55b-47532918fa59",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    },
+                    {
+                        "id": "e50e99f3-5963-4573-af9e-e3f4750b55e2",
+                        "report": {
+                            "verdict": "Benign"
+                        },
+                        "revision": 1,
+                        "status": "found"
+                    }
+                ],
+                "score": -2147483648,
+                "severity": 0,
+                "status": {
+                    "code": 1001,
+                    "label": "FOUND",
+                    "message": "We have found your request"
+                },
+                "summary_report": ""
+            }
+        }
+    ]
+}
