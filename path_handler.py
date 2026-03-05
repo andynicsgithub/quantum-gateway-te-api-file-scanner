@@ -11,6 +11,7 @@ import sys
 import time
 import shutil
 import hashlib
+import subprocess
 from pathlib import Path, PureWindowsPath, PurePosixPath
 from typing import Tuple, Optional
 
@@ -108,7 +109,6 @@ class PathHandler:
                 if path.exists():
                     # Try to detect CIFS/SMB filesystem
                     # This requires the path to exist
-                    import subprocess
                     result = subprocess.run(
                         ['stat', '-f', '-c', '%T', str(path)],
                         capture_output=True,
@@ -183,7 +183,7 @@ class PathHandler:
         return False, f"Failed to validate {path} after {retry_count} attempts"
     
     @staticmethod
-    def safe_move(src: Path, dst: Path, verify_checksum: bool = None, retry_count: int = 3) -> Tuple[bool, str]:
+    def safe_move(src: Path, dst: Path, verify_checksum: Optional[bool] = None, retry_count: int = 3) -> Tuple[bool, str]:
         """
         Platform-aware file move with retry logic and optional verification.
         Handles:
