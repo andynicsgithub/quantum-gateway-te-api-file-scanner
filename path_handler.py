@@ -12,8 +12,12 @@ import time
 import shutil
 import hashlib
 import subprocess
+import logging
 from pathlib import Path, PureWindowsPath, PurePosixPath
 from typing import Tuple, Optional
+
+# Module-level logger
+logger = logging.getLogger('te_scanner.path_handler')
 
 
 class PathHandler:

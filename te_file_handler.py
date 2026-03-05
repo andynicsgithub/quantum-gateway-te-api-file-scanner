@@ -41,6 +41,7 @@ import tarfile
 import copy
 import urllib3
 import shutil
+import logging
 from pathlib import Path
 from path_handler import PathHandler
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -77,6 +78,7 @@ class TE(object):
         self.final_response = ""
         self.final_status_label = ""
         self.report_id = ""
+        self.logger = logging.getLogger('te_scanner.file_handler')
         self.request_template = {
             "request": [{
                 "features": ["te", "te_eb"],
@@ -90,12 +92,6 @@ class TE(object):
 
 
 
-
-    def print(self, msg):
-        """
-        Logging purpose
-        """
-        print("file {} : {}".format(self.full_path, msg))
 
     def set_file_sha1(self):
         """
@@ -118,7 +114,7 @@ class TE(object):
         :return the verdict
         """
         verdict = response["response"][0][feature]["combined_verdict"]
-        self.print("{} verdict is: {}".format(feature, verdict))
+        self.logger.info("{} verdict is: {}".format(feature, verdict))
         return verdict
 
     def parse_report_id(self, response):
@@ -129,7 +125,7 @@ class TE(object):
         try:
             self.report_id = response["response"][0]["te"]["summary_report"]
         except Exception as E:
-            self.print("Could not get TE report id, failure: {}. ".format(E))
+            self.logger.error("Could not get TE report id, failure: {}. ".format(E))
 
     def create_response_info(self, response):
         """
@@ -139,10 +135,10 @@ class TE(object):
         output_path = self.reports_directory / self.sub_dir
         output_path.mkdir(parents=True, exist_ok=True)
         output_file = output_path / (self.file_name + ".response.txt")
-        print(f"self.reports_directory: {self.reports_directory}")
-        print(f"self.sub_dir: {self.sub_dir}")
-        print(f"self.file_name: {self.file_name}")
-        print(f"{output_file}")
+        self.logger.debug(f"self.reports_directory: {self.reports_directory}")
+        self.logger.debug(f"self.sub_dir: {self.sub_dir}")
+        self.logger.debug(f"self.file_name: {self.file_name}")
+        self.logger.debug(f"{output_file}")
         with open(str(output_file), 'w') as file:
             file.write(json.dumps(response, indent=4))
             
@@ -155,9 +151,9 @@ class TE(object):
         request = copy.deepcopy(self.request_template)
         request['request'][0]['features'].remove('te_eb')
         request['request'][0]['sha1'] = self.sha1
-        self.print("sha1: {}".format(self.sha1))
+        self.logger.info(f"sha1: {self.sha1}")
         data = json.dumps(request)
-        self.print("Sending TE Query request before upload in order to check TE cache")
+        self.logger.debug("Sending TE Query request before upload in order to check TE cache")
         response = requests.post(url=self.url + "query", data=data, verify=False)
         response_j = response.json()
         return response_j
@@ -173,15 +169,15 @@ class TE(object):
             'request': data,
             'file': open(str(self.full_path), 'rb')
         }
-        self.print("Sending Upload request of te and te_eb")
+        self.logger.debug("Sending Upload request of te and te_eb")
         try:
             response = requests.post(url=self.url + "upload", files=curr_file, verify=False)
         except Exception as E:
-            self.print("Upload file failed: {}".format(E))
+            self.logger.error("Upload file failed: {}".format(E))
             self.move_file(self.error_directory)            
             raise
         response_j = response.json()
-        self.print("te and te_eb Upload response status : {}".format(response_j["response"][0]["status"]["label"]))
+        self.logger.info("te and te_eb Upload response status : {}".format(response_j["response"][0]["status"]["label"]))
         return response_j
 
     def query_file(self):
@@ -190,7 +186,7 @@ class TE(object):
         Repeat query until receiving te results.  te_eb results of early malicious verdict might be received earlier.
         :return the (last) query response with the handled file TE results
         """
-        self.print("Start sending Query requests of te and te_eb after TE upload")
+        self.logger.debug("Start sending Query requests of te and te_eb after TE upload")
         time.sleep(SECONDS_TO_WAIT)
         request = copy.deepcopy(self.request_template)
         request['request'][0]['sha1'] = self.sha1
@@ -200,8 +196,7 @@ class TE(object):
         te_eb_found = False
         retry_no = 0
         while (not status_label) or (status_label == "PENDING") or (status_label == "PARTIALLY_FOUND"):
-            print()
-            self.print("Sending Query request of te and te_eb")
+            self.logger.debug("Sending Query request of te and te_eb")
             response = requests.post(url=self.url + "query", data=data, verify=False)
             response_j = response.json()
             status_label = response_j['response'][0]['status']['label']
@@ -214,8 +209,8 @@ class TE(object):
                         te_eb_found = True
                         te_eb_verdict = self.parse_verdict(response_j, "te_eb")
                         if te_eb_verdict == "Malicious":
-                            self.print("Early verdict is malicious")
-                            self.print("Continue Query until receiving te results")
+                            self.logger.debug("Early verdict is malicious")
+                            self.logger.debug("Continue Query until receiving te results")
                 te_status_label = response_j["response"][0]["te"]['status']['label']
                 if (te_status_label == "FOUND") or (te_status_label == "NOT_FOUND"):
                     break
@@ -228,11 +223,11 @@ class TE(object):
                             break
                     if no_pending_image:
                         break
-            self.print("te and te_eb Query response status : {}".format(status_label))
+            self.logger.debug("te and te_eb Query response status : {}".format(status_label))
             time.sleep(SECONDS_TO_WAIT)
             retry_no += 1
             if retry_no == MAX_RETRIES:
-                self.print("Reached query max retries.  Stop waiting for te results for")
+                self.logger.debug("Reached query max retries.  Stop waiting for te results for")
                 break
         return response_j
 
@@ -241,7 +236,7 @@ class TE(object):
         Download the TE report to the appliance and save it as a .tgz file
         """
         try:
-            self.print("Sending Download request for TE report")
+            self.logger.debug("Sending Download request for TE report")
             response = requests.get(url=self.url + "download?id=" + self.report_id, verify=False)
             encoded_content_string = response.text
             decoded_content = base64.b64decode(encoded_content_string)
@@ -254,9 +249,9 @@ class TE(object):
             with open(str(decoded_report_archive_path), "wb") as decoded_report_archive_file:
                 decoded_report_archive_file.write(decoded_content)
             
-            self.print("TE report downloaded to: {}".format(decoded_report_archive_path))
+            self.logger.debug("TE report downloaded to: {}".format(decoded_report_archive_path))
         except Exception as E:
-            self.print("Downloading TE report failed:  {} ".format(E))
+            self.logger.error("Downloading TE report failed:  {} ".format(E))
 
 
     def handle_file(self):
@@ -266,17 +261,17 @@ class TE(object):
         query_cache_response = self.check_te_cache()
         cache_status_label = query_cache_response['response'][0]['status']['label']
         if cache_status_label == "FOUND":
-            self.print("Results already exist in TE cache")
+            self.logger.debug("Results already exist in TE cache")
             self.final_response = query_cache_response
             self.final_status_label = cache_status_label
         else:
-            self.print("No results in TE cache before upload")
+            self.logger.debug("No results in TE cache before upload")
             upload_response = self.upload_file()
             upload_status_label = upload_response["response"][0]["status"]["label"]
             if upload_status_label == "UPLOAD_SUCCESS":
                 query_response = self.query_file()
                 query_status_label = query_response["response"][0]["status"]["label"]
-                self.print("Receiving Query response with te results. status: {}".format(query_status_label))
+                self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
                 self.final_response = query_response
                 self.final_status_label = query_status_label
             else:
@@ -285,7 +280,7 @@ class TE(object):
         self.create_response_info(self.final_response)
 
         if self.final_status_label == "FOUND":
-            self.print("move_file called")
+            self.logger.debug("move_file called")
             verdict = self.parse_verdict(self.final_response, "te")
             if verdict == "Malicious":
                 self.move_file(self.quarantine_directory)
@@ -311,7 +306,7 @@ class TE(object):
         success, message = PathHandler.safe_move(current_location, destination_location)
         
         if success:
-            self.print(message)
+            self.logger.debug(message)
         else:
-            self.print(f"Failed to move file {self.file_name}. {message}")
+            self.logger.error(f"Failed to move file {self.file_name}. {message}")
 

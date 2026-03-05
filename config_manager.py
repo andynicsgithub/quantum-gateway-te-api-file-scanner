@@ -32,6 +32,12 @@ class ScannerConfig:
     max_retries: int = 120
     watch_mode: bool = False
     
+    # Logging configuration
+    log_level: str = 'INFO'
+    log_dir: Path = field(default_factory=lambda: Path('logs'))
+    max_log_size_mb: int = 10
+    backup_count: int = 5
+    
     def validate(self) -> Tuple[bool, List[str]]:
         """
         Validate configuration settings.
@@ -103,7 +109,11 @@ class ScannerConfig:
             'concurrency': 4,
             'seconds_to_wait': 15,
             'max_retries': 120,
-            'watch_mode': False
+            'watch_mode': False,
+            'log_level': 'INFO',
+            'log_dir': 'logs',
+            'max_log_size_mb': 10,
+            'backup_count': 5
         }
         
         # 2. Override with environment variables
@@ -112,12 +122,12 @@ class ScannerConfig:
             if env_key in os.environ:
                 value = os.environ[env_key]
                 # Convert types appropriately
-                if key in ['concurrency', 'seconds_to_wait', 'max_retries']:
+                if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']:
                     try:
                         config_data[key] = int(value)
                     except ValueError:
                         print(f"Warning: Invalid integer value for {env_key}: {value}")
-                elif key == 'watch_mode':
+                elif key in ['watch_mode']:
                     config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                 else:
                     config_data[key] = value
@@ -134,12 +144,12 @@ class ScannerConfig:
                     if key in section:
                         value = section[key]
                         # Convert types appropriately
-                        if key in ['concurrency', 'seconds_to_wait', 'max_retries']:
+                        if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']:
                             try:
                                 config_data[key] = int(value)
                             except ValueError:
                                 print(f"Warning: Invalid integer value in config for {key}: {value}")
-                        elif key == 'watch_mode':
+                        elif key in ['watch_mode']:
                             config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                         else:
                             config_data[key] = value
@@ -165,7 +175,7 @@ class ScannerConfig:
         
         # Normalize all paths
         path_keys = ['input_directory', 'reports_directory', 'benign_directory', 
-                     'quarantine_directory', 'error_directory']
+                     'quarantine_directory', 'error_directory', 'log_dir']
         for key in path_keys:
             config_data[key] = PathHandler.normalize_path(config_data[key])
         
@@ -185,6 +195,12 @@ class ScannerConfig:
         print(f"  Seconds to wait:       {self.seconds_to_wait}")
         print(f"  Max retries:           {self.max_retries}")
         print(f"  Watch mode:            {'Enabled' if self.watch_mode else 'Disabled'}")
+        print()
+        print("Logging Configuration:")
+        print(f"  Log level:             {self.log_level}")
+        print(f"  Log directory:         {self.log_dir}")
+        print(f"  Max log size (MB):     {self.max_log_size_mb}")
+        print(f"  Backup count:          {self.backup_count}")
         
         # Show path type warnings
         for name, path in [
