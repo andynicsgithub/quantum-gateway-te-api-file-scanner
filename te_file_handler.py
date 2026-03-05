@@ -114,7 +114,7 @@ class TE(object):
         :return the verdict
         """
         verdict = response["response"][0][feature]["combined_verdict"]
-        self.logger.info("{} verdict is: {}".format(feature, verdict))
+        self.logger.info("{} - {} verdict is: {}".format(self.file_name, feature, verdict))
         return verdict
 
     def parse_report_id(self, response):
@@ -151,7 +151,7 @@ class TE(object):
         request = copy.deepcopy(self.request_template)
         request['request'][0]['features'].remove('te_eb')
         request['request'][0]['sha1'] = self.sha1
-        self.logger.info(f"sha1: {self.sha1}")
+        self.logger.info(f"{self.file_name} - sha1: {self.sha1}")
         data = json.dumps(request)
         self.logger.debug("Sending TE Query request before upload in order to check TE cache")
         response = requests.post(url=self.url + "query", data=data, verify=False)
