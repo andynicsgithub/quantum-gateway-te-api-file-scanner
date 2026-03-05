@@ -207,7 +207,7 @@ def process_files(file_name, sub_dir, full_path, config, url):
     """
     logger = logging.getLogger('te_scanner.main')
     try:
-        logger.info(f"Handling file: {file_name} by TE")
+        logger.info(f"Handling file: {file_name}")
         te = TE(
             url, 
             file_name, 
