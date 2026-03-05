@@ -1,0 +1,11 @@
+# Ensure shell scripts always use Unix line endings (LF)
+# This prevents "bad interpreter" errors on Linux/macOS
+*.sh text eol=lf
+
+# Python files should also use LF
+*.py text eol=lf
+
+# Config files
+*.ini text eol=lf
+*.txt text eol=lf
+*.md text eol=lf
