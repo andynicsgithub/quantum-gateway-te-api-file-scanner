@@ -198,6 +198,23 @@ class ScannerConfig:
         for key in path_keys:
             config_data[key] = PathHandler.normalize_path(config_data[key])
         
+        # Ensure all integer fields are actually integers (configparser returns strings)
+        int_fields = ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']
+        for key in int_fields:
+            if key in config_data and not isinstance(config_data[key], int):
+                try:
+                    config_data[key] = int(config_data[key])
+                except (ValueError, TypeError):
+                    print(f"Warning: Could not convert {key} to integer, using default")
+                    # Reset to default value based on field
+                    defaults = {'concurrency': 4, 'seconds_to_wait': 15, 'max_retries': 120, 
+                               'max_log_size_mb': 10, 'backup_count': 5}
+                    config_data[key] = defaults.get(key, 0)
+        
+        # Ensure watch_mode is boolean
+        if 'watch_mode' in config_data and not isinstance(config_data['watch_mode'], bool):
+            config_data['watch_mode'] = str(config_data['watch_mode']).lower() in ['true', '1', 'yes', 'on']
+        
         # Create and return ScannerConfig instance
         return cls(**config_data)
     
