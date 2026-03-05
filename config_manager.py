@@ -137,6 +137,7 @@ class ScannerConfig:
             parser = configparser.ConfigParser()
             parser.read(config_file)
             
+            # Read from DEFAULT section
             if 'DEFAULT' in parser:
                 section = parser['DEFAULT']
                 
@@ -145,6 +146,24 @@ class ScannerConfig:
                         value = section[key]
                         # Convert types appropriately
                         if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']:
+                            try:
+                                config_data[key] = int(value)
+                            except ValueError:
+                                print(f"Warning: Invalid integer value in config for {key}: {value}")
+                        elif key in ['watch_mode']:
+                            config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
+                        else:
+                            config_data[key] = value
+            
+            # Read from LOGGING section
+            if 'LOGGING' in parser:
+                section = parser['LOGGING']
+                
+                for key in config_data.keys():
+                    if key in section:
+                        value = section[key]
+                        # Convert types appropriately
+                        if key in ['max_log_size_mb', 'backup_count']:
                             try:
                                 config_data[key] = int(value)
                             except ValueError:
