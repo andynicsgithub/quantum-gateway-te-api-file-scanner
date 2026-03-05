@@ -149,7 +149,8 @@ def main():
     if len(archive_files) > 0:
         print(f"\nProcessing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
-            process_files(*file_info, config, url)
+            file_name, sub_dir, full_path = file_info
+            process_files(file_name, sub_dir, full_path, config, url)
 
     # Delete empty sub-directories
     print(f"\nCleaning up empty subdirectories in {config.input_directory}")

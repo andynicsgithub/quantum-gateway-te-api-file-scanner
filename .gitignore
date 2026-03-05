@@ -1,5 +1,8 @@
 # Ignore local configuration files
 config.ini
+CODE_ANALYSIS.md
+DEV_LOG.md
+.local_analysis.md
 
 # Keep the template
 # config.ini.default
