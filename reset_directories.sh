@@ -20,6 +20,10 @@ read_ini() {
     fi
 
     while IFS='=' read -r key value; do
+        # Remove carriage returns (Windows line endings)
+        key="${key//$'\r'/}"
+        value="${value//$'\r'/}"
+        
         [[ -z "$key" ]] && continue
 
         # Skip comments
