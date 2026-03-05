@@ -60,17 +60,28 @@ move_with_structure() {
     local count=0
 
     if [[ ! -d "$src" ]]; then
+        echo "0"
         return 0
     fi
 
     while IFS= read -r -d '' file; do
         local rel="${file#"$src"/}"
-        local dest_dir="$dst/${rel%/*}"
-        mkdir -p "$dest_dir"
-        mv -f "$file" "$dest_dir/${rel##*/}"
-        echo "Moved $rel"
-        ((count++)) || true
-    done < <(find "$src" -type f -print0)
+        local dest_file="$dst/$rel"
+        
+        # Check if file is in a subdirectory
+        if [[ "$rel" == */* ]]; then
+            # File is in a subdirectory, preserve structure
+            local dest_dir="$dst/${rel%/*}"
+            mkdir -p "$dest_dir"
+            mv -f "$file" "$dest_dir/"
+        else
+            # File is in root, move directly to destination
+            mv -f "$file" "$dst/"
+        fi
+        
+        echo "Moved $rel" >&2
+        ((count++))
+    done < <(find "$src" -type f -print0 2>/dev/null)
 
     echo "$count"
 }
