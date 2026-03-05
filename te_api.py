@@ -26,10 +26,11 @@ Changes in v7.0 over v6.3:
 from te_file_handler import TE
 from config_manager import ScannerConfig
 from path_handler import PathHandler
+from logger_config import setup_logging
 import os
 import argparse
 import multiprocessing
-import datetime
+import logging
 from pathlib import Path
 from functools import partial
 
@@ -68,35 +69,45 @@ def main():
     # Load and Validate Config
     # =======================
     
-    print("TE API Scanner v7.0 - Loading configuration...")
+    # Initialize logging first so we can log configuration loading
+    # We'll get basic config without logging first to know where to put logs
     config = ScannerConfig.from_sources(config_file='config.ini', cli_args=args)
+    
+    # Now setup logging with loaded configuration
+    import logging
+    logger = setup_logging(
+        log_dir=config.log_dir,
+        log_level=getattr(logging, config.log_level.upper()),
+        max_bytes=config.max_log_size_mb * 1024 * 1024,
+        backup_count=config.backup_count
+    )
+    
+    logger.info("TE API Scanner v7.01 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()
-    print()
     
     # Validate configuration
     is_valid, errors = config.validate()
     if not is_valid:
-        print("\n==> Configuration validation failed:")
+        logger.error("Configuration validation failed:")
         for error in errors:
-            print(f"  ERROR: {error}")
-        print()
+            logger.error(f"  ERROR: {error}")
         parser.print_help()
         return 1
     
-    print("Configuration validated successfully.\n")
+    logger.info("Configuration validated successfully")
     
     # Build API URL
     url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/"
     
     # Warn about Windows long path support if applicable
     if PathHandler.is_windows() and not PathHandler.supports_long_paths():
-        print("WARNING: Windows long path support is not enabled.")
-        print("         Paths over 260 characters may fail.")
-        print("         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation\n")
+        logger.warning("Windows long path support is not enabled.")
+        logger.warning("         Paths over 260 characters may fail.")
+        logger.warning("         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation")
     
-    print(f"Parallel processing of {config.concurrency} files at once")
+    logger.info(f"Parallel processing of {config.concurrency} files at once")
     
     # =======================
     # File Discovery
@@ -109,7 +120,7 @@ def main():
     other_files = set()
 
     # Recursively walk through input_directory
-    print(f"Scanning input directory: {config.input_directory}")
+    logger.info(f"Scanning input directory: {config.input_directory}")
     for root, dirs, files in os.walk(str(config.input_directory)):
         # Extract the subdirectory relative to the input_directory
         sub_dir = os.path.relpath(root, config.input_directory)
@@ -125,11 +136,11 @@ def main():
             else:
                 other_files.add(file_info)
             
-    print("\nBegin handling input files by TE")
-    print(f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files")
+    logger.info(f"Begin handling input files by TE")
+    logger.info(f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files")
     
     if len(other_files) == 0 and len(archive_files) == 0:
-        print("No files to process. Exiting.")
+        logger.info("No files to process. Exiting.")
         return 0
     
     # =======================
@@ -138,7 +149,7 @@ def main():
 
     # Non-archive files: parallel processing
     if len(other_files) > 0:
-        print(f"\nProcessing {len(other_files)} non-archive files with concurrency={config.concurrency}")
+        logger.info(f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}")
         # Use partial to bind config and url parameters (works with multiprocessing pickle)
         process_func = partial(process_files, config=config, url=url)
         
@@ -147,16 +158,16 @@ def main():
 
     # Archive files: sequential processing
     if len(archive_files) > 0:
-        print(f"\nProcessing {len(archive_files)} archive files sequentially")
+        logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, sub_dir, full_path = file_info
             process_files(file_name, sub_dir, full_path, config, url)
 
     # Delete empty sub-directories
-    print(f"\nCleaning up empty subdirectories in {config.input_directory}")
+    logger.info(f"Cleaning up empty subdirectories in {config.input_directory}")
     find_and_delete_empty_subdirectories(config.input_directory)
     
-    print("\n==> Processing complete!")
+    logger.info("Processing complete!")
     return 0
 
 
@@ -171,6 +182,7 @@ def find_and_delete_empty_subdirectories(input_directory):
     Args:
         input_directory (str): The root directory to start the search.
     """
+    logger = logging.getLogger('te_scanner.main')
     for root, dirs, files in os.walk(input_directory, topdown=False):
         # Iterate in reverse order to avoid issues with modifying the list while iterating
         for dir_name in dirs:
@@ -178,15 +190,9 @@ def find_and_delete_empty_subdirectories(input_directory):
             if not os.listdir(dir_path):  # Check if the directory is empty
                 try:
                     os.rmdir(dir_path)  # Remove the empty directory
-                    print(f"Deleted empty directory: {dir_path}")
+                    logger.debug(f"Deleted empty directory: {dir_path}")
                 except Exception as e:
-                    print(f"Error deleting directory {dir_path}: {str(e)}")
-
-def print_with_timestamp(message, variable):
-    """Print message with timestamp."""
-    now = datetime.datetime.now()
-    timestamp = now.strftime("%H:%M:%S.%f")
-    print("{} - {}".format(timestamp, message.format(variable)))
+                    logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
 
 def process_files(file_name, sub_dir, full_path, config, url):
     """
@@ -199,8 +205,9 @@ def process_files(file_name, sub_dir, full_path, config, url):
         config: ScannerConfig object
         url: TE API URL
     """
+    logger = logging.getLogger('te_scanner.main')
     try:
-        print_with_timestamp("Handling file: {} by TE", file_name)
+        logger.info(f"Handling file: {file_name} by TE")
         te = TE(
             url, 
             file_name, 
@@ -214,7 +221,7 @@ def process_files(file_name, sub_dir, full_path, config, url):
         )
         te.handle_file()
     except Exception as E:
-        print("Could not handle file: {} because: {}. Continue to handle the next file.".format(file_name, E))
+        logger.error(f"Could not handle file: {file_name} because: {E}. Continue to handle the next file.")
 
 if __name__ == '__main__':
     exit(main())

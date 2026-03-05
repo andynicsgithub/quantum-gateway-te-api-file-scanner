@@ -7,3 +7,9 @@ quarantine_directory = /path/to/quarantine
 error_directory = /path/to/directory/for/files/that/error
 concurrency = 4
 seconds_to_wait = 10
+
+[LOGGING]
+log_level = INFO
+log_dir = ./logs
+max_log_size_mb = 10
+backup_count = 5

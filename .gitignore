@@ -12,3 +12,7 @@ test_input/
 test_quarantine/
 test_reports/
 venv/
+
+# Ignore log files
+logs/
+*.log
