@@ -167,9 +167,14 @@ def main():
     find_and_delete_empty_subdirectories(config.input_directory)
     
     logger.info("Processing complete!")
-    logger.info("")
-    logger.info("++++++++++")
-    logger.info("")
+    # Write separator directly to handlers (without timestamps)
+    for handler in logger.handlers:
+        if hasattr(handler, 'stream') and handler.stream:
+            stream = handler.stream
+            stream.write("\n")
+            stream.write("++++++++++\n")
+            stream.write("\n")
+            stream.flush()
     return 0
 
 
