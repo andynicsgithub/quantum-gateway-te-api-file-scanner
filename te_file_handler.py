@@ -100,7 +100,7 @@ class TE(object):
         sha1 = hashlib.sha1()
         with open(str(self.full_path), 'rb') as f:
             while True:
-                block = f.read(2 ** 10)  # One-megabyte blocks
+                block = f.read(2 ** 10)  # One-kilobyte blocks
                 if not block:
                     break
                 sha1.update(block)
@@ -165,13 +165,14 @@ class TE(object):
         """
         request = copy.deepcopy(self.request_template)
         data = json.dumps(request)
-        curr_file = {
-            'request': data,
-            'file': open(str(self.full_path), 'rb')
-        }
         self.logger.debug("Sending Upload request of te and te_eb")
         try:
-            response = requests.post(url=self.url + "upload", files=curr_file, verify=False)
+            with open(str(self.full_path), 'rb') as f:
+                curr_file = {
+                    'request': data,
+                    'file': f
+                }
+                response = requests.post(url=self.url + "upload", files=curr_file, verify=False)
         except Exception as E:
             self.logger.error("Upload file failed: {}".format(E))
             self.move_file(self.error_directory)            
@@ -246,7 +247,7 @@ class TE(object):
             decoded_report_archive_path.parent.mkdir(parents=True, exist_ok=True)
             
             # Write the content to the file
-            with open(str(decoded_report_archive_path), "wb") as decoded_report_archive_file:
+            with open(decoded_report_archive_path, "wb") as decoded_report_archive_file:
                 decoded_report_archive_file.write(decoded_content)
             
             self.logger.debug("TE report downloaded to: {}".format(decoded_report_archive_path))

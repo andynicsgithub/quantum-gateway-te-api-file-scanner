@@ -74,7 +74,6 @@ def main():
     config = ScannerConfig.from_sources(config_file='config.ini', cli_args=args)
     
     # Now setup logging with loaded configuration
-    import logging
     logger = setup_logging(
         log_dir=config.log_dir,
         log_level=getattr(logging, config.log_level.upper()),

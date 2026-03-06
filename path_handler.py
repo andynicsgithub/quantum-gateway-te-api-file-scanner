@@ -60,14 +60,7 @@ class PathHandler:
         path = Path(path_str)
         
         # Normalize the path (resolve . and .., fix separators)
-        try:
-            # Use resolve() cautiously - it requires path to exist
-            # For non-existent paths, just normalize separators
-            normalized = Path(os.path.normpath(path))
-            return normalized
-        except Exception:
-            # If resolve fails, just return normalized version
-            return Path(os.path.normpath(path))
+        return Path(os.path.normpath(path))
     
     @staticmethod
     def is_unc_path(path: Path) -> bool:
@@ -240,7 +233,7 @@ class PathHandler:
                         # Checksum mismatch - delete corrupted destination
                         try:
                             dst.unlink()
-                        except:
+                        except Exception:
                             pass
                         return False, f"Checksum mismatch after move (corruption detected)"
                 
@@ -318,5 +311,5 @@ class PathHandler:
             value, _ = winreg.QueryValueEx(key, 'LongPathsEnabled')
             winreg.CloseKey(key)
             return value == 1
-        except:
+        except Exception:
             return False

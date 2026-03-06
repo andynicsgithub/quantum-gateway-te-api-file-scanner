@@ -247,3 +247,4 @@ class ScannerConfig:
         ]:
             if PathHandler.is_smb_path(path):
                 print(f"  Note: {name} directory is on network path (SMB) - operations may be slower")
+
