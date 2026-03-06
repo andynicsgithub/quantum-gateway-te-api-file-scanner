@@ -1,6 +1,6 @@
 # Branch Information
 
-**Last Updated:** February 13, 2026
+**Last Updated:** March 6, 2026
 
 ---
 
@@ -29,33 +29,57 @@ git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.
 
 ---
 
-#### `v7.0-dev` - Development Branch (Phase 1)
-- **Current Version:** v7.0 Phase 1
-- **Status:** 🚧 In Development/Testing
+#### `7.0` - Stable Release Branch (v7.0)
+- **Current Version:** v7.0
+- **Status:** ✅ Stable, Production-Ready
 - **Purpose:** Cross-platform refactoring (Windows + Linux + SMB support)
-- **Last Update:** February 13, 2026
+- **Last Update:** March 6, 2026
 
-**Features in v7.0-dev:**
+**Features in v7.0:**
 - ✅ Cross-platform support (Windows & Linux)
 - ✅ Windows UNC path support (`\\server\share`)
 - ✅ Linux SMB mount support (`/mnt/share`)
 - ✅ Robust file movement with retry logic
 - ✅ Configuration management system
 - ✅ Network path handling with checksums
-- ⏳ Windows testing in progress
-- ⏳ TE appliance integration testing
+- ✅ Windows testing completed
+- ✅ TE appliance integration testing completed
 
 **Use this branch if:**
-- You're testing the new v7.0 features
+- You want to use the v7.0 stable release
 - You need Windows or SMB/UNC support
-- You're contributing to development
-- You want to help test before release
+- You're using v7.0 in production
 
 **Clone command:**
 ```bash
 git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.git
 cd quantum-gateway-te-api-file-scanner
-git checkout v7.0-dev
+git checkout 7.0
+```
+
+---
+
+#### `v7.01` - Development Branch (v7.01)
+- **Current Version:** v7.01
+- **Status:** 🚧 In Development/Testing
+- **Purpose:** Latest development changes building on v7.0
+- **Last Update:** March 6, 2026
+
+**Features in v7.01:**
+- ✅ All v7.0 features included
+- 🔄 Additional enhancements and fixes
+- ⏳ Testing in progress
+
+**Use this branch if:**
+- You're testing the latest v7.01 features
+- You want the most recent development changes
+- You're contributing to ongoing development
+
+**Clone command:**
+```bash
+git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.git
+cd quantum-gateway-te-api-file-scanner
+git checkout v7.01
 ```
 
 ---
@@ -72,6 +96,12 @@ On February 13, 2026, we reorganized:
 3. Users now get stable code by default
 4. Developers can access v7.0 by switching branches
 
+On March 6, 2026, we completed the v7.0 release:
+1. `v7.0-dev` renamed to `7.0` (stable release)
+2. All testing completed successfully
+3. Created `v7.01` for continued development
+4. Updated documentation to reflect new structure
+
 ---
 
 ## Development Workflow
@@ -79,32 +109,44 @@ On February 13, 2026, we reorganized:
 ```
 main (v6.3.6 - stable)
   │
-  └─→ v7.0-dev (Phase 1 work)
+  ├─→ 7.0 (v7.0 stable - renamed from v7.0-dev)
+  │    │
+  │    ├─ Phase 1: Cross-platform support ✅
+  │    ├─ Phase 1: Linux testing ✅
+  │    ├─ Phase 1: Windows testing ✅
+  │    └─ Status: Stable Release
+  │
+  └─→ v7.01 (Development branch - latest changes)
        │
-       ├─ Phase 1: Cross-platform support ✅ (code complete)
-       ├─ Phase 1: Linux testing ✅ (complete)
-       ├─ Phase 1: Windows testing ⏳ (in progress)
-       │
-       └─→ (After testing complete)
-            └─ Merge to main as v7.0 release
-            └─ Create v8.0-dev for Phase 2 (watch mode)
+       ├─ Based on 7.0 stable
+       ├─ Additional enhancements 🔄
+       └─ Status: In Development
 ```
 
 ---
 
 ## Roadmap
 
-### Current Phase: v7.0 Phase 1 Testing
-- **Branch:** `v7.0-dev`
-- **Status:** Code complete, testing in progress
-- **ETA:** Depends on testing results
+### v7.0 - Released ✅
+- **Branch:** `7.0` (renamed from `v7.0-dev`)
+- **Status:** ✅ Released - Stable
+- **Released:** March 6, 2026
 
-**Remaining Tasks:**
-- [ ] Windows platform testing
-- [ ] TE appliance integration testing
-- [ ] Bug fixes (if any issues found)
-- [ ] Merge to `main` as v7.0 release
-- [ ] Tag v7.0 release
+**Completed Tasks:**
+- [x] Windows platform testing
+- [x] TE appliance integration testing
+- [x] Bug fixes and stabilization
+- [x] Renamed from `v7.0-dev` to `7.0`
+
+### Current Phase: v7.01 Development
+- **Branch:** `v7.01`
+- **Status:** 🚧 In Development
+- **Started:** March 6, 2026
+
+**Current Work:**
+- [ ] Additional enhancements on top of v7.0
+- [ ] Testing and validation
+- [ ] Bug fixes
 
 ### Future: Phase 2 - Watch Mode
 - **Branch:** TBD (likely `v7.1-dev` or `watch-mode-dev`)
@@ -134,21 +176,29 @@ cd quantum-gateway-te-api-file-scanner
 # You're on main branch (v6.3.6) - ready to use
 ```
 
-### I want to test the new v7.0 features
+### I want to use v7.0 stable
 ```bash
 git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.git
 cd quantum-gateway-te-api-file-scanner
-git checkout v7.0-dev
+git checkout 7.0
+# Ready to use v7.0 stable release
+```
+
+### I want to test the latest v7.01 development features
+```bash
+git clone https://github.com/andynicsgithub/quantum-gateway-te-api-file-scanner.git
+cd quantum-gateway-te-api-file-scanner
+git checkout v7.01
 # Follow WINDOWS_TESTING_GUIDE.md or PHASE1_COMPLETE.md
 ```
 
 ### I want to contribute
 1. Fork the repository
 2. Clone your fork
-3. Checkout `v7.0-dev` branch
+3. Checkout `v7.01` branch (latest development)
 4. Create feature branch: `git checkout -b feature/your-feature`
 5. Make changes and test
-6. Submit pull request to `v7.0-dev` branch
+6. Submit pull request to `v7.01` branch
 
 ---
 
@@ -165,12 +215,19 @@ git checkout v7.0-dev
 - `main` branch reset to v6.3.6
 - Documentation updated to reflect branch structure
 
+### March 6, 2026
+- `v7.0-dev` renamed to `7.0` - stable release
+- v7.0 testing completed and released
+- `v7.01` branch created for continued development
+- BRANCH_INFO.md updated with new structure
+
 ---
 
 ## Questions?
 
-- **For stable version issues:** Open issue against `main` branch
-- **For v7.0 development/testing:** Open issue against `v7.0-dev` branch
+- **For v6.3.6 stable issues:** Open issue against `main` branch
+- **For v7.0 stable issues:** Open issue against `7.0` branch
+- **For v7.01 development/testing:** Open issue against `v7.01` branch
 - **For general questions:** Check README.md or create a discussion
 
 ---
@@ -180,7 +237,9 @@ git checkout v7.0-dev
 | Branch | Version | Status | Purpose |
 |--------|---------|--------|---------|
 | `main` | v6.3.6 | ✅ Stable | Production use |
-| `v7.0-dev` | v7.0 Phase 1 | 🚧 Testing | Development/Testing |
+| `7.0` | v7.0 | ✅ Stable | v7.0 Release |
+| `v7.01` | v7.01 | 🚧 Development | Latest changes |
 
 **Default clone gets:** `main` (stable v6.3.6)  
-**To get v7.0:** `git checkout v7.0-dev` after cloning
+**To get v7.0 stable:** `git checkout 7.0` after cloning  
+**To get v7.01 development:** `git checkout v7.01` after cloning
