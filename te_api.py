@@ -152,7 +152,13 @@ def main():
         # Use partial to bind config and url parameters (works with multiprocessing pickle)
         process_func = partial(process_files, config=config, url=url)
         
-        with multiprocessing.Pool(config.concurrency) as pool:
+        # Initialize logging in each worker process
+        with multiprocessing.Pool(
+            config.concurrency,
+            initializer=init_worker,
+            initargs=(config.log_dir, getattr(logging, config.log_level.upper()), 
+                     config.max_log_size_mb * 1024 * 1024, config.backup_count)
+        ) as pool:
             pool.starmap(process_func, other_files)
 
     # Archive files: sequential processing
@@ -192,6 +198,18 @@ def find_and_delete_empty_subdirectories(input_directory):
                     logger.debug(f"Deleted empty directory: {dir_path}")
                 except Exception as e:
                     logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
+
+def init_worker(log_dir, log_level, max_bytes, backup_count):
+    """
+    Initialize logging in each multiprocessing worker process.
+    This function is called when each worker process starts.
+    """
+    setup_logging(
+        log_dir=log_dir,
+        log_level=log_level,
+        max_bytes=max_bytes,
+        backup_count=backup_count
+    )
 
 def process_files(file_name, sub_dir, full_path, config, url):
     """
