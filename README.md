@@ -163,6 +163,48 @@ optional arguments:
 3. Configuration file (`config.ini`)
 4. Built-in defaults
 
+### Logging Configuration
+
+The scanner includes comprehensive logging with automatic rotation to prevent log files from growing too large.
+
+**Log Settings in config.ini:**
+```ini
+[LOGGING]
+log_level = INFO
+log_dir = ./logs
+max_log_size_mb = 10
+backup_count = 5
+```
+
+**Configuration Options:**
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `log_level` | Logging verbosity (DEBUG, INFO, WARNING, ERROR) | INFO |
+| `log_dir` | Directory where log files are stored | ./logs |
+| `max_log_size_mb` | Maximum size of log file before rotation (MB) | 10 |
+| `backup_count` | Number of backup log files to keep | 5 |
+
+**Log Rotation Behavior:**
+- When `te_scanner.log` reaches `max_log_size_mb`, it rotates automatically
+- Previous logs become `te_scanner.log.1`, `te_scanner.log.2`, etc.
+- Oldest logs are deleted when exceeding `backup_count`
+- Each application run is separated by a visual marker (`++++++++++`) for easy reading
+
+**Example Log Output:**
+```
+2026-03-06T19:17:57 - te_scanner - INFO - Processing complete!
+
+++++++++++
+
+2026-03-06T19:18:15 - te_scanner - INFO - TE API Scanner v7.01 - Loading configuration...
+```
+
+**Log Retention Example:**
+With `max_log_size_mb = 10` and `backup_count = 5`:
+- Maximum disk usage: ~60 MB (current + 5 backups × 10 MB each)
+- Adjust these values based on your scan volume and retention requirements
+
 ## Usage
 
 ### Basic Usage
