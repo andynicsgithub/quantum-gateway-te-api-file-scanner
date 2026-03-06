@@ -167,6 +167,9 @@ def main():
     find_and_delete_empty_subdirectories(config.input_directory)
     
     logger.info("Processing complete!")
+    logger.info("")
+    logger.info("++++++++++")
+    logger.info("")
     return 0
 
 
