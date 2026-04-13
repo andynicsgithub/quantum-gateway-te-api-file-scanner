@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-path_handler.py
+path_handler.py v7.01 (stable)
 Cross-platform path handling utilities for TE API Scanner.
 Handles local paths, Windows UNC paths, and Linux SMB mounts with retry logic.
 """

@@ -1,18 +1,41 @@
-# Ignore local configuration files
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Local configuration files (template is config.ini.default)
 config.ini
 CODE_ANALYSIS.md
 DEV_LOG.md
 .local_analysis.md
 
-# Keep the template
-# config.ini.default
+# Test directories (auto-generated)
 test_benign/
 test_error/
 test_input/
 test_quarantine/
 test_reports/
-venv/
 
-# Ignore log files
+# Log files
 logs/
 *.log
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db

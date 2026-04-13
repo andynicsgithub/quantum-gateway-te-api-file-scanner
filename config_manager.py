@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-config_manager.py
+config_manager.py v7.01 (stable)
 Type-safe configuration management for TE API Scanner.
 Supports loading from config file, command-line arguments, and environment variables.
 """
