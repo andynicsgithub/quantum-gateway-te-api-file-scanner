@@ -9,8 +9,9 @@ Files will be moved from the source or "input" directory to one of the following
 - Benign files will be moved to the "benign" directory.
 - Malicious files will be moved to the "quarantine" directory.
 - Files that can't be correctly processed will be moved to the "error" directory.
+- Transcripts 
 
-Logs for all files plus reports for malicious files will be downloaded and placed in the "reports" directory.
+API transcripts for all files will be placed in the "reports" directory. Analysis reports will be downloaded for any malicious files and also placed in the "reports" directory.
 
 Normal files, i.e. files that are not archives, will be processed in a parallel fashion. Change the "concurrency" value to suit the capacity of your environment to avoid overloading or slowing down the processing of files from other sources.
 
@@ -22,8 +23,8 @@ If your use case requires that benign files be left in the input directory and o
 ## Platform Support
 
 **Supported Platforms:**
-- ✅ Linux (tested on Ubuntu, RHEL, CentOS)
-- ✅ Windows (Windows 10/11, Server 2016+)
+- ✅ Linux (tested on debian-based distro)
+- ✅ Windows (tested on Windows 11)
 
 **Network Path Support:**
 - ✅ Windows UNC paths: `\\server\share\folder`
@@ -72,6 +73,9 @@ pip3 install -r requirements.txt
 **Windows:**
 ```powershell
 pip install -r requirements.txt
+
+# Or if 'pip' is not recognized, use:
+python -m pip install -r requirements.txt
 ```
 
 The `requirements.txt` includes platform-specific dependencies (e.g., `pywin32` on Windows).
