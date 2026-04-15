@@ -1,0 +1,62 @@
+# TE API Watcher Service for Linux systemd
+# Install: sudo cp te-watcher.service /etc/systemd/system/
+# Enable: sudo systemctl enable te-watcher
+# Start: sudo systemctl start te-watcher
+# Logs: sudo journalctl -u te-watcher -f
+
+[Unit]
+Description=TE API Watcher Service - Continuous file monitoring for Threat Emulation
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+
+# User account - 'network' is equivalent to Windows Network Service
+# Alternative: create specific user 'te-scanner' for least-privilege
+User=network
+Group=network
+
+# Working directory - config.ini is expected here
+# CHANGE THIS to match your installation path
+WorkingDirectory=/opt/te_api
+
+# Executable command
+# CHANGE THIS to match your Python and script path
+ExecStart=/usr/bin/python3 /opt/te_api/te_api.py --watch --ip 192.168.1.1
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Logging to journal
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=te-watcher
+
+# Resource limits (optional)
+MemoryMax=512M
+CPUQuota=50%
+
+# Security hardening (recommended for production)
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+# Allow read/write to specific directories
+# Adjust these paths to match your config.ini settings
+ReadWritePaths=/opt/te_api/input
+ReadWritePaths=/opt/te_api/reports
+ReadWritePaths=/opt/te_api/benign
+ReadWritePaths=/opt/te_api/quarantine
+ReadWritePaths=/opt/te_api/error
+ReadWritePaths=/opt/te_api/logs
+ReadWritePaths=/opt/te_api/config.ini
+
+# Signal handling - SIGTERM triggers immediate stop
+KillSignal=SIGTERM
+TimeoutStopSec=5
+
+[Install]
+WantedBy=multi-user.target

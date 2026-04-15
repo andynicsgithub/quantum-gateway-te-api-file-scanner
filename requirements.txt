@@ -7,6 +7,5 @@ urllib3>=2.0.0
 # Windows support (conditional - only installed on Windows)
 pywin32>=306; sys_platform == 'win32'
 
-# Future dependencies for Phase 2 (watch mode)
-# Uncomment when implementing Phase 2:
-# watchdog>=3.0.0
+# File watching (watch mode)
+watchdog>=3.0.0

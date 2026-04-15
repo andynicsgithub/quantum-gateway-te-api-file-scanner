@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v7.01 (stable)
+te_api v8.00 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -11,6 +11,14 @@ Features:
   - Move files from source directory to benign_directory, quarantine_directory, or error_directory based on TE verdict
   - Cross-platform support (Linux and Windows)
   - SMB/UNC network path support with retry logic
+  - Watch mode: continuous monitoring of input directory with batch processing
+
+Changes in v8.00 over v7.01:
+  1. Added --watch mode for continuous file monitoring
+  2. Added CopyCompletionWatcher for robust copy detection (waits for file handles to close)
+  3. Added Windows Service and Linux systemd support
+  4. Batch processing with configurable delay and size limits
+  5. Recursive subdirectory monitoring
 
 Changes in v7.01 over v7.0:
   1. Added logging functionality with multiple logging levels
@@ -67,7 +75,10 @@ def main():
     parser.add_argument('-out', '--benign_directory', help='the directory to move Benign files after scanning')
     parser.add_argument('-jail', '--quarantine_directory', help='the directory to move Malicious files after scanning')
     parser.add_argument('-error', '--error_directory', help='the directory to move files which cause a scanning error')
-    parser.add_argument('--watch', action='store_true', help='Watch mode: monitor directory for new files (Phase 2)')
+    parser.add_argument('--watch', action='store_true', help='Watch mode: monitor directory for new files continuously')
+    parser.add_argument('--watch-delay', type=int, default=5, help='Seconds to wait after last file activity before processing batch (default: 5)')
+    parser.add_argument('--watch-min', type=int, default=0, help='Minimum files to trigger batch (0 = process immediately after delay)')
+    parser.add_argument('--watch-max', type=int, default=0, help='Maximum batch size (0 = unlimited)')
     args = parser.parse_args()
     
     # =======================
@@ -86,7 +97,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v7.01 - Loading configuration...")
+    logger.info("TE API Scanner v8.00 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()
@@ -111,11 +122,75 @@ def main():
         logger.warning("         Paths over 260 characters may fail.")
         logger.warning("         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation")
     
-    logger.info(f"Parallel processing of {config.concurrency} files at once")
+    # =======================
+    # Watch Mode vs One-Shot Mode
+    # =======================
     
-    # =======================
-    # File Discovery
-    # =======================
+    if config.watch_mode:
+        # Watch mode: process existing files, then monitor
+        logger.info("Starting in WATCH mode")
+        
+        # Process any existing files immediately
+        existing_files = discover_files(config.input_directory)
+        if existing_files:
+            archive_files, other_files = existing_files
+            logger.info(f"Processing {len(archive_files) + len(other_files)} existing files...")
+            process_discovered_files(archive_files, other_files, config, url)
+            find_and_delete_empty_subdirectories(config.input_directory)
+        else:
+            logger.info("No existing files to process.")
+        
+        # Start watching (blocking call)
+        from file_watcher import start_watching
+        start_watching(config, url)
+        
+    else:
+        # One-shot mode: process and exit
+        logger.info("Starting in ONE-SHOT mode")
+        logger.info(f"Parallel processing of {config.concurrency} files at once")
+        
+        # Discover files
+        archive_files, other_files = discover_files(config.input_directory)
+        
+        logger.info(f"Begin handling input files by TE")
+        logger.info(f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files")
+        
+        if len(other_files) == 0 and len(archive_files) == 0:
+            logger.info("No files to process. Exiting.")
+            return 0
+        
+        # Process files
+        process_discovered_files(archive_files, other_files, config, url)
+        find_and_delete_empty_subdirectories(config.input_directory)
+        
+        logger.info("Processing complete!")
+        # Write separator directly to handlers (without timestamps)
+        for handler in logger.handlers:
+            if hasattr(handler, 'stream') and handler.stream:
+                stream = handler.stream
+                stream.write("\n")
+                stream.write("++++++++++\n")
+                stream.write("\n")
+                stream.flush()
+    
+    return 0
+
+
+# =======================
+# Utility Functions
+# =======================
+
+def discover_files(input_directory):
+    """
+    Discover files in input directory and categorize them as archives or other.
+    
+    Args:
+        input_directory: Path to input directory
+        
+    Returns:
+        Tuple of (archive_files, other_files) as sets of (file_name, sub_dir, full_path) tuples
+    """
+    logger = logging.getLogger('te_scanner.main')
     
     # Identify archive vs other files
     archive_extensions = [".7z", ".arj", ".bz2", ".CAB", ".dmg", ".gz", ".img", ".iso", ".msi", ".pkg", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
@@ -124,10 +199,10 @@ def main():
     other_files = set()
 
     # Recursively walk through input_directory
-    logger.info(f"Scanning input directory: {config.input_directory}")
-    for root, dirs, files in os.walk(str(config.input_directory)):
+    logger.info(f"Scanning input directory: {input_directory}")
+    for root, dirs, files in os.walk(str(input_directory)):
         # Extract the subdirectory relative to the input_directory
-        sub_dir = os.path.relpath(root, config.input_directory)
+        sub_dir = os.path.relpath(root, input_directory)
         for file in files:
             full_path = os.path.join(root, file)
             file_nameonly, file_extension = os.path.splitext(file)
@@ -139,18 +214,21 @@ def main():
                 archive_files.add(file_info)
             else:
                 other_files.add(file_info)
-            
-    logger.info(f"Begin handling input files by TE")
-    logger.info(f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files")
     
-    if len(other_files) == 0 and len(archive_files) == 0:
-        logger.info("No files to process. Exiting.")
-        return 0
-    
-    # =======================
-    # Process files
-    # =======================
+    return archive_files, other_files
 
+def process_discovered_files(archive_files, other_files, config, url):
+    """
+    Process discovered files using the existing processing logic.
+    
+    Args:
+        archive_files: Set of (file_name, sub_dir, full_path) tuples
+        other_files: Set of (file_name, sub_dir, full_path) tuples
+        config: ScannerConfig object
+        url: TE API URL
+    """
+    logger = logging.getLogger('te_scanner.main')
+    
     # Non-archive files: parallel processing
     if len(other_files) > 0:
         logger.info(f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}")
@@ -166,26 +244,6 @@ def main():
         for file_info in archive_files:
             file_name, sub_dir, full_path = file_info
             process_files(file_name, sub_dir, full_path, config, url)
-
-    # Delete empty sub-directories
-    logger.info(f"Cleaning up empty subdirectories in {config.input_directory}")
-    find_and_delete_empty_subdirectories(config.input_directory)
-    
-    logger.info("Processing complete!")
-    # Write separator directly to handlers (without timestamps)
-    for handler in logger.handlers:
-        if hasattr(handler, 'stream') and handler.stream:
-            stream = handler.stream
-            stream.write("\n")
-            stream.write("++++++++++\n")
-            stream.write("\n")
-            stream.flush()
-    return 0
-
-
-# =======================
-# Utility Functions
-# =======================
 
 def find_and_delete_empty_subdirectories(input_directory):
     """

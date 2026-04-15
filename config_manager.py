@@ -32,6 +32,11 @@ class ScannerConfig:
     max_retries: int = 120
     watch_mode: bool = False
     
+    # Watcher-specific configuration
+    watch_batch_delay: int = 5
+    watch_min_batch: int = 0
+    watch_max_batch: int = 0
+    
     # Logging configuration
     log_level: str = 'INFO'
     log_dir: Path = field(default_factory=lambda: Path('logs'))
@@ -77,6 +82,18 @@ class ScannerConfig:
         if self.max_retries < 1:
             errors.append("max_retries must be at least 1")
         
+        # Validate watcher settings
+        if self.watch_batch_delay < 1:
+            errors.append("watch_batch_delay must be at least 1")
+        elif self.watch_batch_delay > 60:
+            errors.append("watch_batch_delay must be at most 60")
+        
+        if self.watch_min_batch < 0:
+            errors.append("watch_min_batch cannot be negative")
+        
+        if self.watch_max_batch < 0:
+            errors.append("watch_max_batch cannot be negative")
+        
         return (len(errors) == 0, errors)
     
     @classmethod
@@ -110,6 +127,9 @@ class ScannerConfig:
             'seconds_to_wait': 15,
             'max_retries': 120,
             'watch_mode': False,
+            'watch_batch_delay': 5,
+            'watch_min_batch': 0,
+            'watch_max_batch': 0,
             'log_level': 'INFO',
             'log_dir': 'logs',
             'max_log_size_mb': 10,
@@ -122,7 +142,8 @@ class ScannerConfig:
             if env_key in os.environ:
                 value = os.environ[env_key]
                 # Convert types appropriately
-                if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']:
+                if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count',
+                           'watch_batch_delay', 'watch_min_batch', 'watch_max_batch']:
                     try:
                         config_data[key] = int(value)
                     except ValueError:
@@ -145,7 +166,8 @@ class ScannerConfig:
                     if key in section:
                         value = section[key]
                         # Convert types appropriately
-                        if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']:
+                        if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count',
+                                   'watch_batch_delay', 'watch_min_batch', 'watch_max_batch']:
                             try:
                                 config_data[key] = int(value)
                             except ValueError:
@@ -163,7 +185,7 @@ class ScannerConfig:
                     if key in section:
                         value = section[key]
                         # Convert types appropriately
-                        if key in ['max_log_size_mb', 'backup_count']:
+                        if key in ['max_log_size_mb', 'backup_count', 'watch_batch_delay', 'watch_min_batch', 'watch_max_batch']:
                             try:
                                 config_data[key] = int(value)
                             except ValueError:
@@ -191,6 +213,13 @@ class ScannerConfig:
                 config_data['concurrency'] = cli_args.concurrency
             if hasattr(cli_args, 'watch') and cli_args.watch:
                 config_data['watch_mode'] = cli_args.watch
+            # Watcher-specific CLI args
+            if hasattr(cli_args, 'watch_delay') and cli_args.watch_delay:
+                config_data['watch_batch_delay'] = cli_args.watch_delay
+            if hasattr(cli_args, 'watch_min') and cli_args.watch_min:
+                config_data['watch_min_batch'] = cli_args.watch_min
+            if hasattr(cli_args, 'watch_max') and cli_args.watch_max:
+                config_data['watch_max_batch'] = cli_args.watch_max
         
         # Normalize all paths
         path_keys = ['input_directory', 'reports_directory', 'benign_directory', 
@@ -231,6 +260,10 @@ class ScannerConfig:
         print(f"  Seconds to wait:       {self.seconds_to_wait}")
         print(f"  Max retries:           {self.max_retries}")
         print(f"  Watch mode:            {'Enabled' if self.watch_mode else 'Disabled'}")
+        if self.watch_mode:
+            print(f"  Batch delay:           {self.watch_batch_delay}s")
+            print(f"  Min batch size:        {self.watch_min_batch if self.watch_min_batch > 0 else 'N/A'}")
+            print(f"  Max batch size:        {self.watch_max_batch if self.watch_max_batch > 0 else 'Unlimited'}")
         print()
         print("Logging Configuration:")
         print(f"  Log level:             {self.log_level}")
