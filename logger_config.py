@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-logger_config.py v7.01 (stable)
+logger_config.py v9.0 (alpha)
 Centralized logging configuration for TE API Scanner.
 Features:
   - Rotating file handler with configurable size and backup count

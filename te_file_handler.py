@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v7.01 (stable)
+te_file_handler v9.0 (alpha)
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
@@ -10,6 +10,9 @@ Features:
   - Downloads TE reports for malicious files
   - Moves files to benign_directory, quarantine_directory, or error_directory based on verdict
   - Pretty-prints JSON response output
+
+Changes in v9.0 over v8.00:
+  1. Added SMTP email notification integration support
 
 Changes in v7.01 over v6.3:
   1. No changes in this file. Changes were made in other files that are part of the application.

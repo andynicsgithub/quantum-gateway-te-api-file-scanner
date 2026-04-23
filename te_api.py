@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v8.00 (alpha)
+te_api v9.0 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -12,6 +12,11 @@ Features:
   - Cross-platform support (Linux and Windows)
   - SMB/UNC network path support with retry logic
   - Watch mode: continuous monitoring of input directory with batch processing
+
+Changes in v9.0 over v8.00:
+  1. Added SMTP email notifications on batch completion in watch mode
+  2. Configurable mail server, credentials, and recipient addresses
+  3. Email reports include batch summary with malicious file details
 
 Changes in v8.00 over v7.01:
   1. Added --watch mode for continuous file monitoring
@@ -107,7 +112,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v8.00 - Loading configuration...")
+    logger.info("TE API Scanner v9.0 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()

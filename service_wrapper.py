@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 r"""
-service_wrapper.py v8.00
+service_wrapper.py v9.0 (alpha)
 Windows Service wrapper for TE API Scanner Watcher.
 
 This module wraps the TE API Scanner to run as a Windows Service.
