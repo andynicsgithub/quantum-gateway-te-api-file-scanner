@@ -64,9 +64,11 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         
         try:
             file_path = str(Path(event.src_path).resolve())
+            self.logger.info(f"[WATCHER] on_created: {file_path}")
             
             # Check if file still exists (might be deleted immediately)
             if not os.path.exists(file_path):
+                self.logger.warning(f"[WATCHER] File deleted immediately: {file_path}")
                 return
             
             self.pending_files[file_path] = {
@@ -75,10 +77,15 @@ class CopyCompletionWatcher(FileSystemEventHandler):
                 'closed': False,
                 'size': os.path.getsize(file_path)
             }
-            self.logger.debug(f"File created: {file_path}")
+            self.logger.info(f"[WATCHER] Added to pending: {file_path} (size: {self.pending_files[file_path]['size']} bytes)")
+            
+            # Check if this single file should trigger immediately
+            self._check_batch_ready()
             
         except Exception as e:
-            self.logger.error(f"Error handling created event for {event.src_path}: {e}")
+            self.logger.error(f"[WATCHER] Error handling created event for {event.src_path}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def on_modified(self, event):
         """
@@ -90,14 +97,23 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         
         try:
             file_path = str(Path(event.src_path).resolve())
+            self.logger.info(f"[WATCHER] on_modified: {file_path}")
             
             if file_path in self.pending_files:
                 # Update activity timestamp
+                old_size = self.pending_files[file_path]['size']
                 self.pending_files[file_path]['last_modified'] = time.time()
-                self.pending_files[file_path]['size'] = os.path.getsize(file_path)
+                new_size = os.path.getsize(file_path)
+                self.pending_files[file_path]['size'] = new_size
+                self.logger.info(f"[WATCHER] File growing: {file_path} ({old_size} → {new_size} bytes)")
+                
+                # Check if this file might be done copying
+                self._check_batch_ready()
                 
         except Exception as e:
-            self.logger.debug(f"Error handling modified event for {event.src_path}: {e}")
+            self.logger.error(f"[WATCHER] Error handling modified event for {event.src_path}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def on_closed(self, event):
         """
@@ -109,17 +125,20 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         
         try:
             file_path = str(Path(event.src_path).resolve())
+            self.logger.info(f"[WATCHER] on_closed: {file_path}")
             
             if file_path in self.pending_files:
                 self.pending_files[file_path]['closed'] = True
                 self.pending_files[file_path]['last_modified'] = time.time()
-                self.logger.debug(f"File closed (copy complete): {file_path}")
+                self.logger.info(f"[WATCHER] File closed (copy complete): {file_path}")
                 
                 # Check if we should trigger batch immediately (single file, no delay)
                 self._check_batch_ready()
                 
         except Exception as e:
-            self.logger.error(f"Error handling closed event for {event.src_path}: {e}")
+            self.logger.error(f"[WATCHER] Error handling closed event for {event.src_path}: {e}")
+            import traceback
+            self.logger.error(traceback.format_exc())
     
     def on_moved(self, event):
         """
@@ -134,41 +153,72 @@ class CopyCompletionWatcher(FileSystemEventHandler):
     def _check_batch_ready(self):
         """
         Check if batch should be processed.
-        Conditions:
-        1. All files are closed
-        2. No activity for batch_delay seconds
-        3. Batch size constraints met
+        Uses "stale file" detection: a file is ready if it hasn't been modified
+        for batch_delay seconds. This works on all platforms, even where
+        on_closed events don't fire (Windows).
         """
         if not self.pending_files:
             return
         
         now = time.time()
         
-        # Check if all files are closed
-        all_closed = all(info['closed'] for info in self.pending_files.values())
+        # Find files that are "stale" (no modification for batch_delay seconds)
+        stale_files = {}
+        still_copying = False
         
-        if not all_closed:
-            # Still copying, don't process yet
+        for file_path, info in self.pending_files.items():
+            time_since_last_modified = now - info['last_modified']
+            
+            # Check batch size constraints first
+            if self.min_batch > 0:
+                file_count = len(self.pending_files)
+                if file_count < self.min_batch:
+                    still_copying = True
+                    continue
+            
+            if self.max_batch > 0 and len(self.pending_files) >= self.max_batch:
+                # Max batch reached, process all
+                still_copying = True
+                continue
+            
+            if time_since_last_modified >= self.batch_delay:
+                stale_files[file_path] = info
+                self.logger.info(f"[WATCHER] File marked as ready (stale for {time_since_last_modified:.1f}s): {file_path}")
+            else:
+                still_copying = True
+        
+        if still_copying or not stale_files:
             return
         
-        # Check batch size constraints
-        file_count = len(self.pending_files)
-        
-        if self.min_batch > 0 and file_count < self.min_batch:
-            # Wait for minimum batch size
+        # Process stale files
+        self.logger.info(f"[WATCHER] {len(stale_files)} files ready for processing")
+        self._trigger_stale_batch(stale_files)
+    
+    def _trigger_stale_batch(self, stale_files):
+        """
+        Trigger batch processing for stale (completed) files.
+        """
+        if not stale_files:
             return
         
-        if self.max_batch > 0 and file_count >= self.max_batch:
-            # Max batch reached, trigger immediately
-            self._trigger_batch()
-            return
+        file_paths = list(stale_files.keys())
+        for path in file_paths:
+            del self.pending_files[path]
         
-        # Check if delay elapsed since last activity
-        last_activity = max(info['last_modified'] for info in self.pending_files.values())
-        elapsed = now - last_activity
+        self.logger.info(f"[WATCHER] Triggering batch processing: {len(file_paths)} files")
         
-        if elapsed >= self.batch_delay:
-            self._trigger_batch()
+        try:
+            self.batch_callback(file_paths)
+        except Exception as e:
+            self.logger.error(f"[WATCHER] Error in batch callback: {e}")
+            for path in file_paths:
+                if os.path.exists(path):
+                    self.pending_files[path] = {
+                        'created': time.time(),
+                        'last_modified': time.time(),
+                        'closed': True,
+                        'size': os.path.getsize(path)
+                    }
     
     def _trigger_batch(self):
         """
@@ -202,7 +252,7 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         return len(self.pending_files)
 
 
-class WatcherThread:
+  class WatcherThread:
     """
     Thread-safe wrapper for watchdog Observer with graceful shutdown.
     """
@@ -227,6 +277,7 @@ class WatcherThread:
         self._running = True
         
         self.logger.info(f"Started watching: {watch_path} (recursive)")
+        self.logger.info(f"Using stale file detection (fallback for Windows)")
     
     def stop(self):
         """
@@ -323,11 +374,20 @@ def start_watching(config, url):
     logger.info("This will run continuously. Press Ctrl+C to exit.")
     
     try:
+        last_check_time = time.time()
+        check_interval = 2  # Check for stale files every 2 seconds
+        
         while True:
-            time.sleep(1)
-            # Optional: Log pending count every 60 seconds
-            if watcher_thread.get_pending_count() > 0:
-                logger.debug(f"Pending files: {watcher_thread.get_pending_count()}")
+            time.sleep(check_interval)
+            
+            # Periodically check for stale (completed) files
+            now = time.time()
+            if now - last_check_time >= check_interval:
+                last_check_time = now
+                watcher_thread.watcher._check_batch_ready()
+                pending = watcher_thread.get_pending_count()
+                if pending > 0:
+                    logger.info(f"[WATCHER] {pending} files pending (waiting for copy completion)...")
                 
     except KeyboardInterrupt:
         logger.info("Shutdown requested...")
