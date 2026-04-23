@@ -1,8 +1,16 @@
 # te_api
 
-**Version 7.0** - Cross-platform Python client for Check Point Threat Emulation API
+**Version 8.0** - Cross-platform Python client for Check Point Threat Emulation API
 
-A Python client side utility for using Threat Emulation API calls to an on-premises Check Point gateway (or Threat Emulation appliance). **Now with full Windows and Linux support, including SMB/UNC network paths.**
+A Python client side utility for using Threat Emulation API calls to an on-premises Check Point gateway (or Threat Emulation appliance). **Now with full Windows and Linux support, including SMB/UNC network paths and continuous directory monitoring.**
+
+## Two Modes of Operation
+
+### 1. One-Shot Mode (Default)
+Processes all files in the input directory once, then exits. Ideal for manual or scheduled scans.
+
+### 2. Watch Mode (Continuous)
+Monitors the input directory continuously, automatically processing files as they arrive. Ideal for unattended operation. Files are processed when copying is complete, with configurable batch collection delays.
 
 The utility will parse a directory tree, and use the Threat Emulation API to scan the files.
 Files will be moved from the source or "input" directory to one of the following directories:
@@ -32,6 +40,105 @@ If your use case requires that benign files be left in the input directory and o
 - ✅ Cross-filesystem moves (e.g., Windows D:\ to E:\)
 - ✅ Automatic retry logic for network latency
 - ✅ Checksum verification for network file transfers
+
+## Watch Mode (Continuous Monitoring)
+
+Watch mode enables automatic, unattended file scanning. The scanner monitors the input directory 24/7, processing files as they are dropped in.
+
+### How It Works
+
+1. **File Created** → Scanner detects new file (copy started)
+2. **File Modified** → File growing (copy ongoing) - resets delay timer
+3. **File Stable** → No changes for `batch_delay` seconds (copy complete)
+4. **Batch Processed** → Files sent to TE appliance for scanning
+
+When the scanner starts, it immediately processes any files already in the input directory, then enters the watch loop.
+
+### Watch Mode Configuration
+
+Add the `[WATCHER]` section to your `config.ini`:
+
+```ini
+[WATCHER]
+# Seconds to wait after last file activity before processing batch
+batch_delay = 5
+
+# Minimum files to trigger batch (0 = process immediately after delay)
+min_batch_size = 0
+
+# Maximum batch size (0 = unlimited)
+max_batch_size = 0
+```
+
+### Command-Line Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--watch` | Enable continuous watch mode | Disabled |
+| `--watch-delay SECS` | Seconds to wait after last file activity | 5 |
+| `--watch-min NUM` | Minimum files to trigger batch | 0 (immediate) |
+| `--watch-max NUM` | Maximum batch size | 0 (unlimited) |
+
+### Watch Mode Examples
+
+**Basic usage:**
+```bash
+python te_api.py --watch --ip 192.168.1.100
+```
+
+**Custom batch delay and minimum files:**
+```bash
+python te_api.py --watch --watch-delay 10 --watch-min 5 --ip 192.168.1.100
+```
+
+**Process files immediately (no delay):**
+```bash
+python te_api.py --watch --watch-delay 1 --ip 192.168.1.100
+```
+
+### Running as a Service
+
+For production use, run the scanner as a service so it starts automatically and restarts on failure.
+
+#### Windows Service
+
+```powershell
+# Install the service (run as Administrator)
+python service_wrapper.py install
+
+# Configure with auto-start and auto-restart
+sc config TEWatcher start=auto
+sc config TEWatcher failure=restart/restart/restart
+
+# Start the service
+sc start TEWatcher
+
+# Check status
+sc query TEWatcher
+
+# View logs in Event Viewer
+eventvwr.msc → Windows Logs → Application → Source: TEWatcher
+```
+
+#### Linux systemd Service
+
+```bash
+# Install service file
+sudo cp te-watcher.service /etc/systemd/system/
+sudo systemctl daemon-reload
+
+# Enable and start
+sudo systemctl enable te-watcher
+sudo systemctl start te-watcher
+
+# Check status
+sudo systemctl status te-watcher
+
+# View logs
+sudo journalctl -u te-watcher -f
+```
+
+**Service Account:** By default, services run with limited privileges (Network Service on Windows, `network` user on Linux). If you need access to network shares or restricted folders, configure a specific user account.
 
 ### The flow
 Going through the input directory and handling each file in order to get its Threat Emulation results.
@@ -113,6 +220,22 @@ concurrency = 2
 
 **Note for Windows:** Use either backslashes `C:\path` or forward slashes `C:/path`. UNC paths are fully supported: `\\server\share\folder`
 
+### Watch Mode Configuration
+
+For continuous monitoring, add the `[WATCHER]` section to your `config.ini`:
+
+```ini
+[WATCHER]
+# Seconds to wait after last file activity before processing batch
+batch_delay = 5
+
+# Minimum files to trigger batch (0 = process immediately after delay)
+min_batch_size = 0
+
+# Maximum batch size (0 = unlimited)
+max_batch_size = 0
+```
+
 ### Method 2: Environment Variables
 
 Set environment variables with `TE_` prefix:
@@ -156,9 +279,13 @@ optional arguments:
   -out, --benign_directory
                         the directory to move Benign files after scanning
   -jail, --quarantine_directory
-                        the directory to move Malicious files after scanning
-  -error, --error_directory
-                        the directory to move files which cause a scanning error
+                         the directory to move Malicious files after scanning
+   -error, --error_directory
+                         the directory to move files which cause a scanning error
+   --watch                Enable continuous watch mode
+   --watch-delay SECS     Seconds to wait after last file activity (default: 5)
+   --watch-min NUM        Minimum files to trigger batch (default: 0)
+   --watch-max NUM        Maximum batch size (default: 0, unlimited)
 ```
 
 **Configuration Priority** (highest to lowest):
@@ -247,6 +374,25 @@ python te_api.py -in "\\server\incoming" -out "\\server\safe" -jail "C:\Quaranti
 ```bash
 python3 te_api.py -in /mnt/incoming -out /mnt/safe -jail /local/quarantine
 ```
+
+### Watch Mode Examples
+
+**Basic watch mode (uses config.ini settings):**
+```bash
+python te_api.py --watch
+```
+
+**Override config settings from command line:**
+```bash
+python te_api.py --watch --ip 192.168.1.100 --watch-delay 10
+```
+
+**Continuous monitoring with minimum batch size:**
+```bash
+python te_api.py --watch --watch-min 5 --watch-delay 15 --ip 192.168.1.100
+```
+
+Press `Ctrl+C` to stop the watcher in development mode.
 
 ## Platform-Specific Notes
 
