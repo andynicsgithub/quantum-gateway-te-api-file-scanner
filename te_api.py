@@ -127,8 +127,27 @@ def main():
     # =======================
     
     if config.watch_mode:
+        # Check for required dependencies
+        if PathHandler.is_windows():
+            try:
+                import win32serviceutil
+            except ImportError:
+                logger.error("ERROR: pywin32 is not installed.")
+                logger.error("Run: pip install pywin32")
+                logger.error("Or: pip install -r requirements.txt")
+                return 1
+        
+        try:
+            import watchdog.observers
+        except ImportError:
+            logger.error("ERROR: watchdog is not installed.")
+            logger.error("Run: pip install watchdog")
+            logger.error("Or: pip install -r requirements.txt")
+            return 1
+        
         # Watch mode: process existing files, then monitor
         logger.info("Starting in WATCH mode")
+        logger.info("Dependencies check passed.")
         
         # Process any existing files immediately
         existing_files = discover_files(config.input_directory)
@@ -142,7 +161,13 @@ def main():
         
         # Start watching (blocking call)
         from file_watcher import start_watching
-        start_watching(config, url)
+        try:
+            start_watching(config, url)
+        except Exception as e:
+            logger.error(f"ERROR starting watcher: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            return 1
         
     else:
         # One-shot mode: process and exit

@@ -312,10 +312,15 @@ def start_watching(config, url):
                 continue
     
     # Create and start watcher
-    watcher_thread = WatcherThread(config, process_batch_callback)
-    watcher_thread.start()
+    try:
+        watcher_thread = WatcherThread(config, process_batch_callback)
+        watcher_thread.start()
+    except Exception as e:
+        logger.error(f"Failed to start watchdog observer: {e}")
+        raise
     
-    logger.info("Entering watch loop (Ctrl+C to stop)")
+    logger.info("Watching directory for new files... (Ctrl+C to stop)")
+    logger.info("This will run continuously. Press Ctrl+C to exit.")
     
     try:
         while True:
