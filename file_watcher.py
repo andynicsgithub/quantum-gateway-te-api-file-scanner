@@ -252,7 +252,7 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         return len(self.pending_files)
 
 
-  class WatcherThread:
+class WatcherThread:
     """
     Thread-safe wrapper for watchdog Observer with graceful shutdown.
     """
