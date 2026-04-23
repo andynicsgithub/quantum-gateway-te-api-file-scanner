@@ -79,6 +79,16 @@ def main():
     parser.add_argument('--watch-delay', type=int, default=5, help='Seconds to wait after last file activity before processing batch (default: 5)')
     parser.add_argument('--watch-min', type=int, default=0, help='Minimum files to trigger batch (0 = process immediately after delay)')
     parser.add_argument('--watch-max', type=int, default=0, help='Maximum batch size (0 = unlimited)')
+    
+    # Email notification CLI args
+    parser.add_argument('--email-enabled', action='store_true', help='Enable email notifications on batch completion')
+    parser.add_argument('--email-smtp-server', help='SMTP server hostname or IP')
+    parser.add_argument('--email-smtp-port', type=int, help='SMTP server port (default: 587)')
+    parser.add_argument('--email-use-tls', action='store_true', help='Use TLS for SMTP connection')
+    parser.add_argument('--email-username', help='SMTP authentication username')
+    parser.add_argument('--email-password', help='SMTP authentication password')
+    parser.add_argument('--email-from', help='Sender email address')
+    parser.add_argument('--email-to', help='Recipient email address')
     args = parser.parse_args()
     
     # =======================

@@ -20,6 +20,18 @@ min_batch_size = 0
 # Maximum batch size (0 = unlimited)
 max_batch_size = 0
 
+[EMAIL]
+# Email notification settings (sent after each batch completes in watch mode)
+# Set enabled=true to activate notifications
+enabled = false
+smtp_server = 
+smtp_port = 587
+use_tls = true
+username = 
+password = 
+from_address = 
+to_address = 
+
 [LOGGING]
 log_level = INFO
 log_dir = ./logs

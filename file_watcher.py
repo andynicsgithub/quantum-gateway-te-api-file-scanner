@@ -314,8 +314,18 @@ def start_watching(config, url):
         """Process a batch of files."""
         from te_file_handler import TE
         from path_handler import PathHandler
+        from notification import send_batch_notification
         
         batch_logger = logging.getLogger('te_scanner.batch_processor')
+        
+        # Track batch results for email notification
+        batch_summary = {
+            'processed': 0,
+            'benign': 0,
+            'malicious': 0,
+            'error': 0,
+            'malicious_files': []
+        }
         
         for file_path in file_paths:
             # Verify file still exists
@@ -350,8 +360,25 @@ def start_watching(config, url):
                 )
                 te.handle_file()
                 
+                # Track results
+                batch_summary['processed'] += 1
+                
+                if te.final_status_label == "FOUND":
+                    verdict = te.parse_verdict(te.final_response, "te")
+                    if verdict == "Malicious":
+                        batch_summary['malicious'] += 1
+                        batch_summary['malicious_files'].append({
+                            'name': file_name,
+                            'verdict': verdict
+                        })
+                    elif verdict == "Benign":
+                        batch_summary['benign'] += 1
+                    elif verdict == "Error":
+                        batch_summary['error'] += 1
+                
             except Exception as e:
                 batch_logger.error(f"Error processing {file_path}: {e}")
+                batch_summary['error'] += 1
                 # Try to move to error directory manually
                 try:
                     error_path = config.error_directory / file_obj.name
@@ -361,6 +388,12 @@ def start_watching(config, url):
                     batch_logger.error(f"Failed to move {file_name} to error directory: {move_error}")
                 # Continue to next file
                 continue
+        
+        # Send email notification after batch completes
+        try:
+            send_batch_notification(config, batch_summary)
+        except Exception as e:
+            batch_logger.warning(f"Email notification failed: {e}")
     
     # Create and start watcher
     try:

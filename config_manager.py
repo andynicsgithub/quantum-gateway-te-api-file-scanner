@@ -37,6 +37,16 @@ class ScannerConfig:
     watch_min_batch: int = 0
     watch_max_batch: int = 0
     
+    # Email notification configuration
+    email_enabled: bool = False
+    email_smtp_server: str = ''
+    email_smtp_port: int = 587
+    email_use_tls: bool = True
+    email_username: str = ''
+    email_password: str = ''
+    email_from: str = ''
+    email_to: str = ''
+    
     # Logging configuration
     log_level: str = 'INFO'
     log_dir: Path = field(default_factory=lambda: Path('logs'))
@@ -133,7 +143,15 @@ class ScannerConfig:
             'log_level': 'INFO',
             'log_dir': 'logs',
             'max_log_size_mb': 10,
-            'backup_count': 5
+            'backup_count': 5,
+            'email_enabled': False,
+            'email_smtp_server': '',
+            'email_smtp_port': 587,
+            'email_use_tls': True,
+            'email_username': '',
+            'email_password': '',
+            'email_from': '',
+            'email_to': ''
         }
         
         # 2. Override with environment variables
@@ -143,12 +161,12 @@ class ScannerConfig:
                 value = os.environ[env_key]
                 # Convert types appropriately
                 if key in ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count',
-                           'watch_batch_delay', 'watch_min_batch', 'watch_max_batch']:
+                           'watch_batch_delay', 'watch_min_batch', 'watch_max_batch', 'email_smtp_port']:
                     try:
                         config_data[key] = int(value)
                     except ValueError:
                         print(f"Warning: Invalid integer value for {env_key}: {value}")
-                elif key in ['watch_mode']:
+                elif key in ['watch_mode', 'email_enabled', 'email_use_tls']:
                     config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                 else:
                     config_data[key] = value
@@ -194,6 +212,24 @@ class ScannerConfig:
                             config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                         else:
                             config_data[key] = value
+            
+            # Read from EMAIL section
+            if 'EMAIL' in parser:
+                section = parser['EMAIL']
+                
+                for key in config_data.keys():
+                    if key in section:
+                        value = section[key]
+                        # Convert types appropriately
+                        if key in ['email_smtp_port']:
+                            try:
+                                config_data[key] = int(value)
+                            except ValueError:
+                                print(f"Warning: Invalid integer value in config for {key}: {value}")
+                        elif key in ['email_enabled', 'email_use_tls']:
+                            config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
+                        else:
+                            config_data[key] = value
         
         # 4. Override with command-line arguments (highest priority)
         if cli_args:
@@ -220,6 +256,24 @@ class ScannerConfig:
                 config_data['watch_min_batch'] = cli_args.watch_min
             if hasattr(cli_args, 'watch_max') and cli_args.watch_max:
                 config_data['watch_max_batch'] = cli_args.watch_max
+            
+            # Email CLI args
+            if hasattr(cli_args, 'email_enabled') and cli_args.email_enabled:
+                config_data['email_enabled'] = cli_args.email_enabled
+            if hasattr(cli_args, 'email_smtp_server') and cli_args.email_smtp_server:
+                config_data['email_smtp_server'] = cli_args.email_smtp_server
+            if hasattr(cli_args, 'email_smtp_port') and cli_args.email_smtp_port:
+                config_data['email_smtp_port'] = cli_args.email_smtp_port
+            if hasattr(cli_args, 'email_use_tls') and cli_args.email_use_tls:
+                config_data['email_use_tls'] = cli_args.email_use_tls
+            if hasattr(cli_args, 'email_username') and cli_args.email_username:
+                config_data['email_username'] = cli_args.email_username
+            if hasattr(cli_args, 'email_password') and cli_args.email_password:
+                config_data['email_password'] = cli_args.email_password
+            if hasattr(cli_args, 'email_from') and cli_args.email_from:
+                config_data['email_from'] = cli_args.email_from
+            if hasattr(cli_args, 'email_to') and cli_args.email_to:
+                config_data['email_to'] = cli_args.email_to
         
         # Normalize all paths
         path_keys = ['input_directory', 'reports_directory', 'benign_directory', 
@@ -228,7 +282,7 @@ class ScannerConfig:
             config_data[key] = PathHandler.normalize_path(config_data[key])
         
         # Ensure all integer fields are actually integers (configparser returns strings)
-        int_fields = ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count']
+        int_fields = ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count', 'email_smtp_port']
         for key in int_fields:
             if key in config_data and not isinstance(config_data[key], int):
                 try:
@@ -237,12 +291,18 @@ class ScannerConfig:
                     print(f"Warning: Could not convert {key} to integer, using default")
                     # Reset to default value based on field
                     defaults = {'concurrency': 4, 'seconds_to_wait': 15, 'max_retries': 120, 
-                               'max_log_size_mb': 10, 'backup_count': 5}
+                                'max_log_size_mb': 10, 'backup_count': 5, 'email_smtp_port': 587}
                     config_data[key] = defaults.get(key, 0)
         
         # Ensure watch_mode is boolean
         if 'watch_mode' in config_data and not isinstance(config_data['watch_mode'], bool):
             config_data['watch_mode'] = str(config_data['watch_mode']).lower() in ['true', '1', 'yes', 'on']
+        
+        # Ensure email boolean fields are actually booleans
+        if 'email_enabled' in config_data and not isinstance(config_data['email_enabled'], bool):
+            config_data['email_enabled'] = str(config_data['email_enabled']).lower() in ['true', '1', 'yes', 'on']
+        if 'email_use_tls' in config_data and not isinstance(config_data['email_use_tls'], bool):
+            config_data['email_use_tls'] = str(config_data['email_use_tls']).lower() in ['true', '1', 'yes', 'on']
         
         # Create and return ScannerConfig instance
         return cls(**config_data)
@@ -270,6 +330,18 @@ class ScannerConfig:
         print(f"  Log directory:         {self.log_dir}")
         print(f"  Max log size (MB):     {self.max_log_size_mb}")
         print(f"  Backup count:          {self.backup_count}")
+        
+        print("Email Notification:")
+        print(f"  Enabled:               {'Yes' if self.email_enabled else 'No'}")
+        if self.email_enabled:
+            print(f"  SMTP server:           {self.email_smtp_server}:{self.email_smtp_port}")
+            print(f"  TLS:                   {'Yes' if self.email_use_tls else 'No'}")
+            print(f"  From:                  {self.email_from}")
+            print(f"  To:                    {self.email_to}")
+            if self.email_username:
+                print(f"  Username:              {self.email_username}")
+            else:
+                print(f"  Username:              (none - will attempt anonymous connect)")
         
         # Show path type warnings
         for name, path in [
