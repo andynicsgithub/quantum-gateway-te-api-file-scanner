@@ -51,6 +51,7 @@ import shutil
 import logging
 from pathlib import Path
 from path_handler import PathHandler
+from zip_archive import _add_file_with_lock
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
