@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-config_manager.py v9.0 (alpha)
+config_manager.py v9.1 (alpha)
 Type-safe configuration management for TE API Scanner.
 Supports loading from config file, command-line arguments, and environment variables.
 """
@@ -46,6 +46,7 @@ class ScannerConfig:
     email_password: str = ''
     email_from: str = ''
     email_to: str = ''
+    email_verbose: bool = False
     
     # Logging configuration
     log_level: str = 'INFO'
@@ -151,7 +152,8 @@ class ScannerConfig:
             'email_username': '',
             'email_password': '',
             'email_from': '',
-            'email_to': ''
+            'email_to': '',
+            'email_verbose': False
         }
         
         # 2. Override with environment variables
@@ -226,7 +228,7 @@ class ScannerConfig:
                                 config_data[key] = int(value)
                             except ValueError:
                                 print(f"Warning: Invalid integer value in config for {key}: {value}")
-                        elif key in ['email_enabled', 'email_use_tls']:
+                        elif key in ['email_enabled', 'email_use_tls', 'email_verbose']:
                             config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                         else:
                             config_data[key] = value
@@ -274,6 +276,8 @@ class ScannerConfig:
                 config_data['email_from'] = cli_args.email_from
             if hasattr(cli_args, 'email_to') and cli_args.email_to:
                 config_data['email_to'] = cli_args.email_to
+            if hasattr(cli_args, 'email_verbose') and cli_args.email_verbose:
+                config_data['email_verbose'] = cli_args.email_verbose
         
         # Normalize all paths
         path_keys = ['input_directory', 'reports_directory', 'benign_directory', 
@@ -303,6 +307,8 @@ class ScannerConfig:
             config_data['email_enabled'] = str(config_data['email_enabled']).lower() in ['true', '1', 'yes', 'on']
         if 'email_use_tls' in config_data and not isinstance(config_data['email_use_tls'], bool):
             config_data['email_use_tls'] = str(config_data['email_use_tls']).lower() in ['true', '1', 'yes', 'on']
+        if 'email_verbose' in config_data and not isinstance(config_data['email_verbose'], bool):
+            config_data['email_verbose'] = str(config_data['email_verbose']).lower() in ['true', '1', 'yes', 'on']
         
         # Create and return ScannerConfig instance
         return cls(**config_data)
@@ -342,6 +348,7 @@ class ScannerConfig:
                 print(f"  Username:              {self.email_username}")
             else:
                 print(f"  Username:              (none - will attempt anonymous connect)")
+            print(f"  Verbose:               {'Yes' if self.email_verbose else 'No'}")
         
         # Show path type warnings
         for name, path in [

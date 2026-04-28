@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-notification.py v9.0 (alpha)
+notification.py v9.1 (alpha)
 Email notification system for TE API Scanner.
 Sends batch completion notifications via SMTP.
 """
@@ -35,7 +35,7 @@ def send_batch_notification(config, summary):
     
     try:
         subject = f"TE Scanner: {summary['processed']} files processed"
-        body = _build_email_body(config, summary)
+        body = _build_email_body(config, summary, config.email_verbose)
         
         msg = MIMEMultipart()
         msg['From'] = config.email_from
@@ -62,7 +62,7 @@ def send_batch_notification(config, summary):
         logger.warning(f"Failed to send email notification: {e}")
 
 
-def _build_email_body(config, summary):
+def _build_email_body(config, summary, verbose=False):
     """Build the email body text."""
     timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
     
@@ -79,6 +79,19 @@ def _build_email_body(config, summary):
         f'  Errors:            {summary["error"]}',
         f'',
     ]
+    
+    if verbose:
+        lines.append(f'File Details:')
+        for f in summary.get('all_files', []):
+            path = f['path']
+            name = f['name']
+            verdict = f['verdict']
+            if path:
+                file_display = f'{path}/{name}'
+            else:
+                file_display = name
+            lines.append(f'  {file_display} - {verdict}')
+        lines.append('')
     
     if summary['malicious_files']:
         lines.append(f'Malicious Files:')

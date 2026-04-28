@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v9.0 (alpha)
+te_api v9.1 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -12,6 +12,11 @@ Features:
   - Cross-platform support (Linux and Windows)
   - SMB/UNC network path support with retry logic
   - Watch mode: continuous monitoring of input directory with batch processing
+
+Changes in v9.1 over v9.0:
+  1. Added email_verbose option for detailed file listing with verdicts in email
+  2. Email notifications now also sent in one-shot mode
+  3. process_files() returns verdict info for aggregation
 
 Changes in v9.0 over v8.00:
   1. Added SMTP email notifications on batch completion in watch mode
@@ -94,6 +99,7 @@ def main():
     parser.add_argument('--email-password', help='SMTP authentication password')
     parser.add_argument('--email-from', help='Sender email address')
     parser.add_argument('--email-to', help='Recipient email address')
+    parser.add_argument('--email-verbose', action='store_true', help='Include detailed file list with verdicts in email notifications')
     args = parser.parse_args()
     
     # =======================
@@ -267,7 +273,12 @@ def process_discovered_files(archive_files, other_files, config, url):
         config: ScannerConfig object
         url: TE API URL
     """
+    from notification import send_batch_notification
+    
     logger = logging.getLogger('te_scanner.main')
+    
+    # Collect results for email notification
+    all_files = []
     
     # Non-archive files: parallel processing
     if len(other_files) > 0:
@@ -276,14 +287,34 @@ def process_discovered_files(archive_files, other_files, config, url):
         process_func = partial(process_files, config=config, url=url)
         
         with multiprocessing.Pool(config.concurrency) as pool:
-            pool.starmap(process_func, other_files)
+            results = pool.starmap(process_func, other_files)
+            all_files.extend(results)
 
     # Archive files: sequential processing
     if len(archive_files) > 0:
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, sub_dir, full_path = file_info
-            process_files(file_name, sub_dir, full_path, config, url)
+            result = process_files(file_name, sub_dir, full_path, config, url)
+            all_files.append(result)
+    
+    # Send email notification if enabled
+    if config.email_enabled:
+        batch_summary = {
+            'processed': len(all_files),
+            'benign': sum(1 for f in all_files if f.get('verdict') == 'Benign'),
+            'malicious': sum(1 for f in all_files if f.get('verdict') == 'Malicious'),
+            'error': sum(1 for f in all_files if f.get('status') == 'error' or f.get('verdict') == 'Error'),
+            'malicious_files': [
+                {'name': f['name'], 'verdict': f['verdict']}
+                for f in all_files if f.get('verdict') == 'Malicious'
+            ],
+            'all_files': all_files,
+        }
+        try:
+            send_batch_notification(config, batch_summary)
+        except Exception as e:
+            logger.warning(f"Email notification failed: {e}")
 
 def find_and_delete_empty_subdirectories(input_directory):
     """
@@ -314,6 +345,9 @@ def process_files(file_name, sub_dir, full_path, config, url):
         full_path: Full path to the file
         config: ScannerConfig object
         url: TE API URL
+        
+    Returns:
+        dict with keys: 'name', 'path', 'verdict', 'status'
     """
     # Initialize logging for this worker process (needed for Windows spawn)
     setup_logging(
@@ -324,6 +358,7 @@ def process_files(file_name, sub_dir, full_path, config, url):
     )
     
     logger = logging.getLogger('te_scanner.main')
+    result = {'name': file_name, 'path': sub_dir if sub_dir else '', 'verdict': 'Unknown', 'status': 'error'}
     try:
         logger.info(f"Handling file: {file_name}")
         te = TE(
@@ -338,8 +373,19 @@ def process_files(file_name, sub_dir, full_path, config, url):
             config.error_directory
         )
         te.handle_file()
+        
+        if te.final_status_label == "FOUND":
+            verdict = te.parse_verdict(te.final_response, "te")
+            result['verdict'] = verdict
+            result['status'] = 'success'
+        else:
+            result['verdict'] = te.final_status_label if te.final_status_label else 'Not_Found'
+            result['status'] = 'success'
     except Exception as E:
         logger.error(f"Could not handle file: {file_name} because: {E}. Continue to handle the next file.")
+        result['status'] = 'error'
+    
+    return result
 
 if __name__ == '__main__':
     exit(main())

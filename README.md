@@ -140,6 +140,71 @@ sudo journalctl -u te-watcher -f
 
 **Service Account:** By default, services run with limited privileges (Network Service on Windows, `network` user on Linux). If you need access to network shares or restricted folders, configure a specific user account.
 
+### Email Notifications
+
+The scanner can send batch completion email notifications via SMTP. Notifications are sent after each batch finishes processing in watch mode, and after all files are processed in one-shot mode.
+
+**Configuration in config.ini:**
+
+```ini
+[EMAIL]
+email_enabled = true
+email_smtp_server = smtp.example.com
+email_smtp_port = 587
+email_use_tls = true
+email_username = user@example.com
+email_password = your_password
+email_from = scanner@example.com
+email_to = admin@example.com
+email_verbose = false
+```
+
+**Configuration Options:**
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `email_enabled` | Enable email notifications | false |
+| `email_smtp_server` | SMTP server hostname or IP | - |
+| `email_smtp_port` | SMTP server port | 587 |
+| `email_use_tls` | Use TLS for SMTP connection | true |
+| `email_username` | SMTP authentication username | - |
+| `email_password` | SMTP authentication password | - |
+| `email_from` | Sender email address | - |
+| `email_to` | Recipient email address | - |
+| `email_verbose` | Include detailed file list with verdicts | false |
+
+**Verbose Mode:** When `email_verbose = true`, the email includes a flat list of all processed files with their relative paths and verdicts:
+
+```
+File Details:
+  malware.exe - Malicious
+  docs/report.pdf - Benign
+  subdir/archive.zip - Malicious
+  subdir/data.csv - Benign
+```
+
+**Command-Line Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--email-enabled` | Enable email notifications |
+| `--email-smtp-server HOST` | SMTP server hostname or IP |
+| `--email-smtp-port PORT` | SMTP server port |
+| `--email-use-tls` | Use TLS for SMTP connection |
+| `--email-username USER` | SMTP authentication username |
+| `--email-password PASS` | SMTP authentication password |
+| `--email-from ADDR` | Sender email address |
+| `--email-to ADDR` | Recipient email address |
+| `--email-verbose` | Include detailed file list with verdicts |
+
+**Example:**
+
+```bash
+python te_api.py --watch --email-enabled --email-smtp-server 10.1.48.103 --email-to admin@example.com --email-from scanner@example.com --email-verbose
+```
+
+**Note:** Email notifications require the `[EMAIL]` section to be properly configured in `config.ini` with the correct key names (`email_enabled`, `email_smtp_server`, etc.). Keys without the `email_` prefix will not be recognized.
+
 ### The flow
 Going through the input directory and handling each file in order to get its Threat Emulation results.
 Directory tree structure below the input directory will be reproduced in the bening directory.
@@ -268,24 +333,33 @@ usage: te_api.py [-h] [-in INPUT_DIRECTORY] [-rep REPORTS_DIRECTORY]
                  [-ip APPLIANCE_IP] [-n CONCURRENCY] [-out BENIGN_DIRECTORY]
                  [-jail QUARANTINE_DIRECTORY] [-error ERROR_DIRECTORY]
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -in, --input_directory
-                        the input files folder to be scanned by TE
-  -rep, --reports_directory
-                        the output folder with TE results
-  -ip, --appliance_ip   the appliance ip address
-  -n, --concurrency     Number of concurrent file processes
-  -out, --benign_directory
-                        the directory to move Benign files after scanning
-  -jail, --quarantine_directory
-                         the directory to move Malicious files after scanning
-   -error, --error_directory
-                         the directory to move files which cause a scanning error
-   --watch                Enable continuous watch mode
-   --watch-delay SECS     Seconds to wait after last file activity (default: 5)
-   --watch-min NUM        Minimum files to trigger batch (default: 0)
-   --watch-max NUM        Maximum batch size (default: 0, unlimited)
+  optional arguments:
+   -h, --help            show this help message and exit
+   -in, --input_directory
+                         the input files folder to be scanned by TE
+   -rep, --reports_directory
+                         the output folder with TE results
+   -ip, --appliance_ip   the appliance ip address
+   -n, --concurrency     Number of concurrent file processes
+   -out, --benign_directory
+                         the directory to move Benign files after scanning
+   -jail, --quarantine_directory
+                          the directory to move Malicious files after scanning
+    -error, --error_directory
+                          the directory to move files which cause a scanning error
+    --watch                Enable continuous watch mode
+    --watch-delay SECS     Seconds to wait after last file activity (default: 5)
+    --watch-min NUM        Minimum files to trigger batch (default: 0)
+    --watch-max NUM        Maximum batch size (default: 0, unlimited)
+    --email-enabled        Enable email notifications
+    --email-smtp-server    SMTP server hostname or IP
+    --email-smtp-port      SMTP server port (default: 587)
+    --email-use-tls        Use TLS for SMTP connection
+    --email-username       SMTP authentication username
+    --email-password       SMTP authentication password
+    --email-from           Sender email address
+    --email-to             Recipient email address
+    --email-verbose        Include detailed file list with verdicts
 ```
 
 **Configuration Priority** (highest to lowest):

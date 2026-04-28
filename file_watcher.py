@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v9.0 (alpha)
+file_watcher.py v9.1 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)
@@ -324,7 +324,8 @@ def start_watching(config, url):
             'benign': 0,
             'malicious': 0,
             'error': 0,
-            'malicious_files': []
+            'malicious_files': [],
+            'all_files': []
         }
         
         for file_path in file_paths:
@@ -365,6 +366,11 @@ def start_watching(config, url):
                 
                 if te.final_status_label == "FOUND":
                     verdict = te.parse_verdict(te.final_response, "te")
+                    batch_summary['all_files'].append({
+                        'name': file_name,
+                        'path': sub_dir if sub_dir else '',
+                        'verdict': verdict
+                    })
                     if verdict == "Malicious":
                         batch_summary['malicious'] += 1
                         batch_summary['malicious_files'].append({
@@ -375,10 +381,22 @@ def start_watching(config, url):
                         batch_summary['benign'] += 1
                     elif verdict == "Error":
                         batch_summary['error'] += 1
+                else:
+                    batch_summary['all_files'].append({
+                        'name': file_name,
+                        'path': sub_dir if sub_dir else '',
+                        'verdict': te.final_status_label if te.final_status_label else 'Not_Found'
+                    })
+                    batch_summary['error'] += 1
                 
             except Exception as e:
                 batch_logger.error(f"Error processing {file_path}: {e}")
                 batch_summary['error'] += 1
+                batch_summary['all_files'].append({
+                    'name': file_name,
+                    'path': sub_dir if sub_dir else '',
+                    'verdict': 'Error'
+                })
                 # Try to move to error directory manually
                 try:
                     error_path = config.error_directory / file_obj.name
