@@ -171,9 +171,8 @@ def main():
         logger.info("Dependencies check passed.")
         
         # Process any existing files immediately
-        existing_files = discover_files(config.input_directory)
-        if existing_files:
-            archive_files, other_files = existing_files
+        archive_files, other_files = discover_files(config.input_directory)
+        if archive_files or other_files:
             logger.info(f"Processing {len(archive_files) + len(other_files)} existing files...")
             process_discovered_files(archive_files, other_files, config, url)
             find_and_delete_empty_subdirectories(config.input_directory)
