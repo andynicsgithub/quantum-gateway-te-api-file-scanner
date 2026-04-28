@@ -58,6 +58,7 @@ from path_handler import PathHandler
 from logger_config import setup_logging
 from zip_archive import ZipArchiveManager
 import os
+import shutil
 import argparse
 import multiprocessing
 import logging
@@ -308,48 +309,75 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
     """
     Process discovered files using the existing processing logic.
     
+    In multiprocessing mode, non-archive files are copied to a temp directory by
+    workers, then consolidated into the zip by the main process.
+    Archive files are processed sequentially in the main process and added directly
+    to the zip.
+    
     Args:
         archive_files: Set of (file_name, sub_dir, full_path) tuples
         other_files: Set of (file_name, sub_dir, full_path) tuples
         config: ScannerConfig object
         url: TE API URL
-        zip_mgr: ZipArchiveManager instance for concurrent zip writes (None if disabled)
+        zip_mgr: ZipArchiveManager instance (None if disabled)
     """
     from notification import send_batch_notification
+    import tempfile as stdlib_tempfile
     
     logger = logging.getLogger('te_scanner.main')
     
     # Collect results for email notification
     all_files = []
     
-    # Build zip config for worker processes
+    # Build temp directory and zip config for multiprocessing workers
     zip_config = None
+    temp_dir = None
+    verdict_basenames = [
+        os.path.basename(str(config.benign_directory)),
+        os.path.basename(str(config.quarantine_directory)),
+        os.path.basename(str(config.error_directory))
+    ]
     if zip_mgr:
+        temp_dir = stdlib_tempfile.mkdtemp(prefix='te_zip_', dir=str(config.zip_archive_directory))
         zip_config = (
             str(zip_mgr.zip_path),
             config.zip_password,
-            os.path.basename(str(config.benign_directory)),
-            os.path.basename(str(config.quarantine_directory)),
-            os.path.basename(str(config.error_directory))
+            verdict_basenames[0],
+            verdict_basenames[1],
+            verdict_basenames[2],
+            temp_dir
         )
     
-    # Non-archive files: parallel processing
+    # Non-archive files: parallel processing (workers copy to temp dir)
     if len(other_files) > 0:
         logger.info(f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}")
-        # Use partial to bind config and url parameters (works with multiprocessing pickle)
         process_func = partial(process_files, config=config, url=url, zip_config=zip_config)
         
         with multiprocessing.Pool(config.concurrency) as pool:
             results = pool.starmap(process_func, other_files)
             all_files.extend(results)
 
-    # Archive files: sequential processing
+    # Archive files: sequential processing in main process (add directly to zip)
     if len(archive_files) > 0:
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, sub_dir, full_path = file_info
-            result = process_files(file_name, sub_dir, full_path, config, url, zip_config=zip_config)
+            result = process_files(file_name, sub_dir, full_path, config, url, zip_config=zip_mgr)
             all_files.append(result)
+    
+    # Consolidate temp directory files into the zip (multiprocessing mode)
+    if zip_mgr and temp_dir:
+        try:
+            zip_mgr.consolidate(temp_dir, verdict_basenames, config.zip_password)
+        except Exception as e:
+            logger.error(f"Failed to consolidate temp files into zip: {e}")
+    
+    # Cleanup temp directory
+    if temp_dir and os.path.exists(temp_dir):
+        try:
+            shutil.rmtree(temp_dir)
+        except Exception as e:
+            logger.warning(f"Failed to clean up temp directory {temp_dir}: {e}")
     
     # Send email notification if enabled
     if config.email_enabled:

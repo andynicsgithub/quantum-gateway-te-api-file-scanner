@@ -51,7 +51,7 @@ import shutil
 import logging
 from pathlib import Path
 from path_handler import PathHandler
-from zip_archive import add_file_with_lock
+from zip_archive import ZipArchiveManager
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -311,51 +311,48 @@ class TE(object):
 
     def _add_to_zip(self, verdict_basename=None):
         """
-        Copy the file into the zip archive before moving it to the verdict directory.
+        Copy the file into the zip archive (or temp dir for multiprocessing)
+        before moving it to the verdict directory.
         The file must still be at self.full_path when this is called.
         
-        Handles both multiprocessing (zip_config tuple with file-based locking)
-        and single-process (ZipArchiveManager instance) modes.
+        In single-process mode (watch mode): adds directly to ZipArchiveManager.
+        In multiprocessing mode: copies file to temp directory for later consolidation.
         
         Args:
             verdict_basename: Directory name inside zip (e.g. 'benign', 'quarantine', 'error').
-                             If None, determined from final_response verdict.
         """
         if self.zip_config is None:
             return
         
         if not verdict_basename:
-            try:
-                parsed_verdict = self.parse_verdict(self.final_response, "te")
-            except Exception:
-                parsed_verdict = self.final_status_label
-            
-            if parsed_verdict == "Malicious":
-                verdict_basename = os.path.basename(str(self.quarantine_directory))
-            elif parsed_verdict == "Benign":
-                verdict_basename = os.path.basename(str(self.benign_directory))
-            elif parsed_verdict == "Error":
-                verdict_basename = os.path.basename(str(self.error_directory))
-            else:
-                return
+            return
         
-        # Check if it's a ZipArchiveManager instance (single-process/watch mode)
-        if hasattr(self.zip_config, 'add_file'):
+        # Single-process mode (watch mode): ZipArchiveManager instance
+        if isinstance(self.zip_config, ZipArchiveManager):
             self.logger.debug(f"Adding {self.file_name} to zip archive")
             self.zip_config.add_file(self.full_path, verdict_basename, self.sub_dir, self.file_name)
             return
         
-        # Multiprocessing mode: use lock-based add
-        zip_path = self.zip_config[0]
-        zip_password = self.zip_config[1]
+        # Multiprocessing mode: copy to temp directory for consolidation
+        if not isinstance(self.zip_config, (list, tuple)):
+            return
         
-        if not zip_path:
+        # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, 
+        #              error_basename, temp_dir)
+        if len(self.zip_config) < 6:
+            return
+        
+        temp_dir = self.zip_config[5]
+        if not temp_dir:
             return
         
         try:
-            add_file_with_lock(zip_path, zip_password, self.full_path, verdict_basename, self.sub_dir, self.file_name, self.logger)
+            dest_path = Path(temp_dir) / verdict_basename / self.sub_dir
+            dest_path.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(self.full_path), str(dest_path / self.file_name))
+            self.logger.debug(f"Copied {self.file_name} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.file_name}")
         except Exception as e:
-            self.logger.error(f"Failed to add {self.file_name} to zip archive: {e}")
+            self.logger.error(f"Failed to copy {self.file_name} to temp for zip: {e}")
     
     def move_file(self, destination_directory):
         """

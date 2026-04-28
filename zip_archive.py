@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 
 """
-zip_archive.py v1.0 (alpha)
+zip_archive.py v1.1 (alpha)
 Manages creation of password-protected zip archives for batch file processing.
-Files are added to the zip concurrently with their move to verdict directories.
+Files are added to the zip before they are moved to verdict directories.
+
+In multiprocessing mode, workers copy files to a temp directory, then the
+main process consolidates everything into the zip archive.
+In single-process mode (watch mode), files are added directly to the zip.
 """
 
 import os
 import shutil
 import zipfile
-import fcntl
 import logging
 from pathlib import Path
-from datetime import datetime
 
 
 class ZipArchiveManager:
@@ -101,6 +103,48 @@ class ZipArchiveManager:
         except Exception as e:
             self.logger.error(f"Failed to add file to zip archive ({file_name}): {e}")
     
+    def consolidate(self, temp_dir, verdict_basenames, password):
+        """
+        Consolidate files from a temp directory into the zip archive.
+        Used after multiprocessing workers copy files to the temp directory.
+        
+        Args:
+            temp_dir: Path to temp directory containing copies organized as {verdict}/{subdir}/{file}
+            verdict_basenames: List of (verdict_basename, benign_basename, quarantine_basename, error_basename)
+            password: Password for the zip archive
+        """
+        if self._zip_file is None:
+            return
+        
+        temp_path = Path(temp_dir)
+        if not temp_path.exists():
+            self.logger.debug("No temp directory found, nothing to consolidate")
+            return
+        
+        try:
+            for verdict_basename in verdict_basenames:
+                verdict_dir = temp_path / verdict_basename
+                if not verdict_dir.exists():
+                    continue
+                self._consolidate_dir(verdict_dir, verdict_basename, "")
+            self.logger.info(f"Consolidated files from temp directory into {self.zip_path}")
+        except Exception as e:
+            self.logger.error(f"Failed to consolidate temp directory into zip: {e}")
+    
+    def _consolidate_dir(self, dir_path, verdict_basename, rel_path):
+        """Recursively walk temp dir and add files to zip."""
+        for item in dir_path.iterdir():
+            if item.is_file():
+                if rel_path:
+                    internal_path = f"{verdict_basename}/{rel_path}/{item.name}"
+                else:
+                    internal_path = f"{verdict_basename}/{item.name}"
+                self._zip_file.write(item, internal_path)
+                self.logger.debug(f"Consolidated to zip: {internal_path}")
+            elif item.is_dir():
+                new_rel = f"{rel_path}/{item.name}" if rel_path else item.name
+                self._consolidate_dir(item, verdict_basename, new_rel)
+    
     def close(self):
         """
         Close the zip archive and return its path.
@@ -152,55 +196,3 @@ class ZipArchiveManager:
                 return f"{size / (1024 * 1024):.1f} MB"
         except Exception:
             return "unknown size"
-
-
-def add_file_with_lock(zip_path, password, source_path, verdict_basename, sub_dir, file_name, logger=None):
-    """
-    Add a file to a password-protected zip archive using file locking.
-    Designed for use in multiprocessing contexts where multiple workers
-    need to append to the same zip file safely.
-    
-    Uses fcntl.flock for cross-process file locking on Unix/Linux.
-    
-    Args:
-        zip_path: Path to the zip file (must exist and be openable in append mode)
-        password: Password for the zip archive
-        source_path: Path to the source file
-        verdict_basename: Directory name inside zip (e.g. 'benign', 'quarantine', 'error')
-        sub_dir: Subdirectory relative to input (empty string if at root)
-        file_name: Name of the file
-        logger: Logger instance for logging
-    """
-    if logger is None:
-        logger = logging.getLogger('te_scanner.zip_archive')
-    
-    src = Path(source_path)
-    if not src.exists():
-        logger.warning(f"File no longer exists, cannot add to zip: {src}")
-        return
-    
-    # Build internal zip path
-    if sub_dir:
-        internal_path = f"{verdict_basename}/{sub_dir}/{file_name}"
-    else:
-        internal_path = f"{verdict_basename}/{file_name}"
-    
-    lock_path = str(zip_path) + '.lock'
-    
-    # Open lock file and acquire exclusive lock
-    lock_file = open(lock_path, 'w')
-    try:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
-        
-        # Open zip in append mode and add the file
-        with zipfile.ZipFile(str(zip_path), 'a', compression=zipfile.ZIP_DEFLATED) as zf:
-            zf.setpassword(password.encode('utf-8'))
-            zf.write(src, internal_path)
-        
-        logger.debug(f"Added to zip: {internal_path}")
-        
-    except Exception as e:
-        logger.error(f"Failed to add file to zip archive ({file_name}): {e}")
-    finally:
-        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-        lock_file.close()
