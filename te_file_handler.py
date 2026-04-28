@@ -51,7 +51,7 @@ import shutil
 import logging
 from pathlib import Path
 from path_handler import PathHandler
-from zip_archive import _add_file_with_lock
+from zip_archive import add_file_with_lock
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -353,7 +353,7 @@ class TE(object):
             return
         
         try:
-            _add_file_with_lock(zip_path, zip_password, self.full_path, verdict_basename, self.sub_dir, self.file_name, self.logger)
+            add_file_with_lock(zip_path, zip_password, self.full_path, verdict_basename, self.sub_dir, self.file_name, self.logger)
         except Exception as e:
             self.logger.error(f"Failed to add {self.file_name} to zip archive: {e}")
     
