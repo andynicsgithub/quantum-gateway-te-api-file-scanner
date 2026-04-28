@@ -8,6 +8,8 @@ quarantine_directory = /path/to/quarantine
 error_directory = /path/to/directory/for/files/that/error
 concurrency = 4
 seconds_to_wait = 10
+zip_archive_directory = /path/to/directory/for/zip/archives
+zip_password =
 
 [WATCHER]
 # Watch mode settings (used when running with --watch flag)

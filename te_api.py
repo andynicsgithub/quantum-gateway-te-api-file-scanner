@@ -9,9 +9,15 @@ Features:
   - Store results in an output directory
   - Support concurrent processing of multiple files (via command line argument or config.ini)
   - Move files from source directory to benign_directory, quarantine_directory, or error_directory based on TE verdict
+  - Create password-protected zip archives of processed files (configurable)
   - Cross-platform support (Linux and Windows)
   - SMB/UNC network path support with retry logic
   - Watch mode: continuous monitoring of input directory with batch processing
+
+Changes in v9.2 over v9.1:
+  1. Added password-protected zip archive creation for processed files
+  2. Zip created concurrently with file moves to verdict directories
+  3. Configurable via config.ini, environment variables, and CLI args
 
 Changes in v9.1 over v9.0:
   1. Added email_verbose option for detailed file listing with verdicts in email
@@ -50,12 +56,14 @@ from te_file_handler import TE
 from config_manager import ScannerConfig
 from path_handler import PathHandler
 from logger_config import setup_logging
+from zip_archive import ZipArchiveManager
 import os
 import argparse
 import multiprocessing
 import logging
 from pathlib import Path
 from functools import partial
+from datetime import datetime
 
 # =======================
 # Main entry point
@@ -100,6 +108,10 @@ def main():
     parser.add_argument('--email-from', help='Sender email address')
     parser.add_argument('--email-to', help='Recipient email address')
     parser.add_argument('--email-verbose', action='store_true', help='Include detailed file list with verdicts in email notifications')
+    
+    # Zip archive CLI args
+    parser.add_argument('-za', '--zip_archive_directory', help='Directory to store password-protected zip archives of processed files')
+    parser.add_argument('--zip_password', help='Password for zip archives (empty or not provided = no zip archive)')
     args = parser.parse_args()
     
     # =======================
@@ -170,19 +182,34 @@ def main():
         logger.info("Starting in WATCH mode")
         logger.info("Dependencies check passed.")
         
+        # Prepare zip archive if password is configured
+        zip_mgr = None
+        zip_timestamp = None
+        if config.zip_password:
+            zip_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            zip_mgr = ZipArchiveManager.create_archive(config.zip_archive_directory, config.zip_password, zip_timestamp)
+            if zip_mgr:
+                logger.info(f"Zip archive enabled: {zip_mgr.zip_path}")
+            else:
+                logger.warning("Failed to initialize zip archive, proceeding without it")
+        
         # Process any existing files immediately
         archive_files, other_files = discover_files(config.input_directory)
         if archive_files or other_files:
             logger.info(f"Processing {len(archive_files) + len(other_files)} existing files...")
-            process_discovered_files(archive_files, other_files, config, url)
+            process_discovered_files(archive_files, other_files, config, url, zip_mgr)
             find_and_delete_empty_subdirectories(config.input_directory)
+            if zip_mgr:
+                zip_mgr.close()
         else:
             logger.info("No existing files to process.")
+            if zip_mgr:
+                zip_mgr.abort()
         
         # Start watching (blocking call)
         from file_watcher import start_watching
         try:
-            start_watching(config, url)
+            start_watching(config, url, zip_mgr)
         except Exception as e:
             logger.error(f"ERROR starting watcher: {e}")
             import traceback
@@ -194,6 +221,16 @@ def main():
         logger.info("Starting in ONE-SHOT mode")
         logger.info(f"Parallel processing of {config.concurrency} files at once")
         
+        # Prepare zip archive if password is configured
+        zip_mgr = None
+        if config.zip_password:
+            zip_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            zip_mgr = ZipArchiveManager.create_archive(config.zip_archive_directory, config.zip_password, zip_timestamp)
+            if zip_mgr:
+                logger.info(f"Zip archive enabled: {zip_mgr.zip_path}")
+            else:
+                logger.warning("Failed to initialize zip archive, proceeding without it")
+        
         # Discover files
         archive_files, other_files = discover_files(config.input_directory)
         
@@ -202,11 +239,16 @@ def main():
         
         if len(other_files) == 0 and len(archive_files) == 0:
             logger.info("No files to process. Exiting.")
+            if zip_mgr:
+                zip_mgr.abort()
             return 0
         
         # Process files
-        process_discovered_files(archive_files, other_files, config, url)
+        process_discovered_files(archive_files, other_files, config, url, zip_mgr)
         find_and_delete_empty_subdirectories(config.input_directory)
+        
+        if zip_mgr:
+            zip_mgr.close()
         
         logger.info("Processing complete!")
         # Write separator directly to handlers (without timestamps)
@@ -262,7 +304,7 @@ def discover_files(input_directory):
     
     return archive_files, other_files
 
-def process_discovered_files(archive_files, other_files, config, url):
+def process_discovered_files(archive_files, other_files, config, url, zip_mgr=None):
     """
     Process discovered files using the existing processing logic.
     
@@ -271,6 +313,7 @@ def process_discovered_files(archive_files, other_files, config, url):
         other_files: Set of (file_name, sub_dir, full_path) tuples
         config: ScannerConfig object
         url: TE API URL
+        zip_mgr: ZipArchiveManager instance for concurrent zip writes (None if disabled)
     """
     from notification import send_batch_notification
     
@@ -279,11 +322,22 @@ def process_discovered_files(archive_files, other_files, config, url):
     # Collect results for email notification
     all_files = []
     
+    # Build zip config for worker processes
+    zip_config = None
+    if zip_mgr:
+        zip_config = (
+            str(zip_mgr.zip_path),
+            config.zip_password,
+            os.path.basename(str(config.benign_directory)),
+            os.path.basename(str(config.quarantine_directory)),
+            os.path.basename(str(config.error_directory))
+        )
+    
     # Non-archive files: parallel processing
     if len(other_files) > 0:
         logger.info(f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}")
         # Use partial to bind config and url parameters (works with multiprocessing pickle)
-        process_func = partial(process_files, config=config, url=url)
+        process_func = partial(process_files, config=config, url=url, zip_config=zip_config)
         
         with multiprocessing.Pool(config.concurrency) as pool:
             results = pool.starmap(process_func, other_files)
@@ -294,7 +348,7 @@ def process_discovered_files(archive_files, other_files, config, url):
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, sub_dir, full_path = file_info
-            result = process_files(file_name, sub_dir, full_path, config, url)
+            result = process_files(file_name, sub_dir, full_path, config, url, zip_config=zip_config)
             all_files.append(result)
     
     # Send email notification if enabled
@@ -334,7 +388,7 @@ def find_and_delete_empty_subdirectories(input_directory):
                 except Exception as e:
                     logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
 
-def process_files(file_name, sub_dir, full_path, config, url):
+def process_files(file_name, sub_dir, full_path, config, url, zip_config=None):
     """
     Process a single file through the TE API.
     
@@ -344,6 +398,7 @@ def process_files(file_name, sub_dir, full_path, config, url):
         full_path: Full path to the file
         config: ScannerConfig object
         url: TE API URL
+        zip_config: Tuple of (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
         
     Returns:
         dict with keys: 'name', 'path', 'verdict', 'status'
@@ -369,7 +424,8 @@ def process_files(file_name, sub_dir, full_path, config, url):
             config.reports_directory, 
             config.benign_directory, 
             config.quarantine_directory, 
-            config.error_directory
+            config.error_directory,
+            zip_config=zip_config
         )
         te.handle_file()
         

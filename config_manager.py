@@ -48,6 +48,10 @@ class ScannerConfig:
     email_to: str = ''
     email_verbose: bool = False
     
+    # Zip archive configuration
+    zip_archive_directory: Path = field(default_factory=lambda: Path('test_zip_archives'))
+    zip_password: str = ''
+    
     # Logging configuration
     log_level: str = 'INFO'
     log_dir: Path = field(default_factory=lambda: Path('logs'))
@@ -105,6 +109,10 @@ class ScannerConfig:
         if self.watch_max_batch < 0:
             errors.append("watch_max_batch cannot be negative")
         
+        # Validate zip archive settings
+        if self.zip_password and not self.zip_archive_directory:
+            errors.append("zip_archive_directory is required when zip_password is set")
+        
         return (len(errors) == 0, errors)
     
     @classmethod
@@ -153,7 +161,9 @@ class ScannerConfig:
             'email_password': '',
             'email_from': '',
             'email_to': '',
-            'email_verbose': False
+            'email_verbose': False,
+            'zip_archive_directory': 'test_zip_archives',
+            'zip_password': ''
         }
         
         # 2. Override with environment variables
@@ -294,10 +304,16 @@ class ScannerConfig:
                 config_data['email_to'] = cli_args.email_to
             if hasattr(cli_args, 'email_verbose') and cli_args.email_verbose:
                 config_data['email_verbose'] = cli_args.email_verbose
+            
+            # Zip archive CLI args
+            if hasattr(cli_args, 'zip_archive_directory') and cli_args.zip_archive_directory:
+                config_data['zip_archive_directory'] = cli_args.zip_archive_directory
+            if hasattr(cli_args, 'zip_password') and cli_args.zip_password is not None:
+                config_data['zip_password'] = cli_args.zip_password
         
         # Normalize all paths
-        path_keys = ['input_directory', 'reports_directory', 'benign_directory', 
-                     'quarantine_directory', 'error_directory', 'log_dir']
+        path_keys = ['input_directory', 'reports_directory', 'benign_directory',
+                      'quarantine_directory', 'error_directory', 'zip_archive_directory', 'log_dir']
         for key in path_keys:
             config_data[key] = PathHandler.normalize_path(config_data[key])
         
@@ -365,6 +381,11 @@ class ScannerConfig:
             else:
                 print(f"  Username:              (none - will attempt anonymous connect)")
             print(f"  Verbose:               {'Yes' if self.email_verbose else 'No'}")
+        
+        # Zip Archive Configuration
+        print("Zip Archive:")
+        print(f"  Archive directory:     {self.zip_archive_directory}")
+        print(f"  Password set:          {'Yes' if self.zip_password else 'No'}")
         
         # Show path type warnings
         for name, path in [

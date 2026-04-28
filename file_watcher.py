@@ -14,6 +14,7 @@ import os
 import time
 import logging
 from pathlib import Path
+from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
 
@@ -299,15 +300,22 @@ class WatcherThread:
         return self.watcher.get_pending_count()
 
 
-def start_watching(config, url):
+def start_watching(config, url, initial_zip_mgr=None):
     """
     Start file watching (blocking call).
     
     Args:
         config: ScannerConfig object
         url: TE API URL
+        initial_zip_mgr: ZipArchiveManager for pre-existing files (None = not applicable)
     """
     logger = logging.getLogger('te_scanner.watcher')
+    
+    # Build zip config tuple for TE instances (used in watch mode single-process)
+    zip_config = None
+    if config.zip_password and not initial_zip_mgr:
+        # Per-batch zip - config passed as tuple for consistency with te_file_handler
+        pass  # zip_config set per-batch inside process_batch_callback
     
     # Define batch processing callback
     def process_batch_callback(file_paths):
@@ -315,8 +323,21 @@ def start_watching(config, url):
         from te_file_handler import TE
         from path_handler import PathHandler
         from notification import send_batch_notification
+        from zip_archive import ZipArchiveManager
         
         batch_logger = logging.getLogger('te_scanner.batch_processor')
+        
+        # Create per-batch zip archive if configured
+        batch_zip_mgr = None
+        if config.zip_password:
+            batch_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            batch_zip_mgr = ZipArchiveManager.create_archive(
+                config.zip_archive_directory, config.zip_password, batch_timestamp
+            )
+            if batch_zip_mgr:
+                batch_logger.info(f"Zip archive: {batch_zip_mgr.zip_path}")
+            else:
+                batch_logger.warning("Failed to create zip archive for batch")
         
         # Track batch results for email notification
         batch_summary = {
@@ -357,7 +378,8 @@ def start_watching(config, url):
                     config.reports_directory,
                     config.benign_directory,
                     config.quarantine_directory,
-                    config.error_directory
+                    config.error_directory,
+                    zip_config=batch_zip_mgr if batch_zip_mgr else None
                 )
                 te.handle_file()
                 
@@ -406,6 +428,10 @@ def start_watching(config, url):
                     batch_logger.error(f"Failed to move {file_name} to error directory: {move_error}")
                 # Continue to next file
                 continue
+        
+        # Close zip archive for this batch
+        if batch_zip_mgr:
+            batch_zip_mgr.close()
         
         # Send email notification after batch completes
         try:

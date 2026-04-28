@@ -70,7 +70,7 @@ class TE(object):
      3. Write the TE results (last query/upload response info) into the output folder.
           If resulted TE verdict is malicious then also download the TE report and write it into the output folder.
     """
-    def __init__(self, url, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory):
+    def __init__(self, url, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory, zip_config=None):
         self.url = url
         self.file_name = file_name
         self.sub_dir = sub_dir
@@ -81,6 +81,10 @@ class TE(object):
         self.benign_directory = Path(benign_directory) if not isinstance(benign_directory, Path) else benign_directory
         self.quarantine_directory = Path(quarantine_directory) if not isinstance(quarantine_directory, Path) else quarantine_directory
         self.error_directory = Path(error_directory) if not isinstance(error_directory, Path) else error_directory
+        # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
+        # For multiprocessing: passed as tuple since ZipArchiveManager can't be shared across processes
+        # For watch mode (single process): can be a ZipArchiveManager instance
+        self.zip_config = zip_config
         self.sha1 = ""
         self.final_response = ""
         self.final_status_label = ""
@@ -290,17 +294,54 @@ class TE(object):
         if self.final_status_label == "FOUND":
             self.logger.debug("move_file called")
             verdict = self.parse_verdict(self.final_response, "te")
+            verdict_basename = None
             if verdict == "Malicious":
+                verdict_basename = os.path.basename(str(self.quarantine_directory))
+                self._add_to_zip()
                 self.move_file(self.quarantine_directory)
                 self.parse_report_id(self.final_response)
                 if self.report_id != "":
                     self.download_report()
             elif verdict == "Benign":
+                verdict_basename = os.path.basename(str(self.benign_directory))
+                self._add_to_zip()
                 self.move_file(self.benign_directory)
             elif verdict == "Error":
+                verdict_basename = os.path.basename(str(self.error_directory))
+                self._add_to_zip()
                 self.move_file(self.error_directory)
                 
 
+    def _add_to_zip(self):
+        """
+        Copy the file into the zip archive before moving it to the verdict directory.
+        The file must still be at self.full_path when this is called.
+        
+        Handles both multiprocessing (zip_config tuple with file-based locking)
+        and single-process (ZipArchiveManager instance) modes.
+        """
+        if self.zip_config is None:
+            return
+        
+        # Check if it's a ZipArchiveManager instance (single-process/watch mode)
+        if hasattr(self.zip_config, 'add_file'):
+            self.logger.debug(f"Adding {self.file_name} to zip archive")
+            self.zip_config.add_file(self.full_path, self._get_verdict_basename(), self.sub_dir, self.file_name)
+            return
+        
+        # Multiprocessing mode: use lock-based add
+        zip_path = self.zip_config[0]
+        zip_password = self.zip_config[1]
+        verdict_basename = self._get_verdict_basename()
+        
+        if not zip_path or not verdict_basename:
+            return
+        
+        try:
+            _add_file_with_lock(zip_path, zip_password, self.full_path, verdict_basename, self.sub_dir, self.file_name, self.logger)
+        except Exception as e:
+            self.logger.error(f"Failed to add {self.file_name} to zip archive: {e}")
+    
     def move_file(self, destination_directory):
         """
         Move the file from its current location to the specified destination directory.
