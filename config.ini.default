@@ -12,25 +12,26 @@ seconds_to_wait = 10
 [WATCHER]
 # Watch mode settings (used when running with --watch flag)
 # Wait time in seconds after last file activity before processing batch
-batch_delay = 5
+watch_batch_delay = 5
 
 # Minimum files to trigger batch (0 = process immediately after delay)
-min_batch_size = 0
+watch_min_batch = 0
 
 # Maximum batch size (0 = unlimited)
-max_batch_size = 0
+watch_max_batch = 0
 
 [EMAIL]
 # Email notification settings (sent after each batch completes in watch mode)
 # Set enabled=true to activate notifications
-enabled = false
-smtp_server = 
-smtp_port = 587
-use_tls = true
-username = 
-password = 
-from_address = 
-to_address = 
+email_enabled = false
+email_smtp_server = 
+email_smtp_port = 587
+email_use_tls = true
+email_username = 
+email_password = 
+email_from = 
+email_to = 
+email_verbose = false
 
 [LOGGING]
 log_level = INFO

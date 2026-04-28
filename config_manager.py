@@ -215,6 +215,22 @@ class ScannerConfig:
                         else:
                             config_data[key] = value
             
+            # Read from WATCHER section
+            if 'WATCHER' in parser:
+                section = parser['WATCHER']
+                
+                for key in config_data.keys():
+                    if key in section:
+                        value = section[key]
+                        # Convert types appropriately
+                        if key in ['watch_batch_delay', 'watch_min_batch', 'watch_max_batch']:
+                            try:
+                                config_data[key] = int(value)
+                            except ValueError:
+                                print(f"Warning: Invalid integer value in config for {key}: {value}")
+                        else:
+                            config_data[key] = value
+            
             # Read from EMAIL section
             if 'EMAIL' in parser:
                 section = parser['EMAIL']
