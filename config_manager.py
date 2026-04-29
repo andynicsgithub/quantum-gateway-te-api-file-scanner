@@ -284,7 +284,7 @@ class ScannerConfig:
                 section = parser['TEX_SCRUBBED_PARTS']
                 enabled_parts = set()
                 for code, value in section.items():
-                    val = value.split(';')[0].strip().lower()
+                    val = value.split('#')[0].strip().lower()
                     if val in ['true', '1', 'yes', 'on']:
                         enabled_parts.add(int(code))
                 if enabled_parts:

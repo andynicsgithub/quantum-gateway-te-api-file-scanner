@@ -49,9 +49,9 @@ tex_response_info_directory = tex_response_info
 tex_clean_files_directory = tex_clean_files
 
 [TEX_SUPPORTED_FILE_TYPES]
-; File types (extensions) to send to TEX API for scrubbing
-; Files with extensions not listed here will be skipped from TEX processing
-; Empty section or missing entry = skip that file type
+# File types (extensions) to send to TEX API for scrubbing
+# Files with extensions not listed here will be skipped from TEX processing
+# Empty section or missing entry = skip that file type
 bmp = true
 dcm = true
 dib = true
@@ -103,24 +103,24 @@ xltx = true
 xml = true
 
 [TEX_SCRUBBED_PARTS]
-; Scrubbed parts codes to include in TEX scrub request
-; Each entry enables that content part for scrubbing
-; Disabled entries (false) are excluded from the scrub request
-1017 = true   ; Custom Properties
-1018 = true   ; Database Queries
-1019 = true   ; Embedded Objects
-1021 = true   ; Fast Save Data
-1025 = true   ; Linked Objects
-1026 = true   ; Macros and Code
-1034 = true   ; Sensitive Hyperlinks
-1036 = true   ; Statistic Properties
-1037 = true   ; Summary Properties
-1137 = true   ; PDF GoToR Actions
-1139 = true   ; PDF Launch Actions
-1141 = true   ; PDF URI Actions
-1142 = true   ; PDF Sound Actions
-1143 = true   ; PDF Movie Actions
-1150 = true   ; PDF JavaScript Actions
-1151 = true   ; PDF Submit Form Actions
-1178 = true   ; PDF 3D Artwork Annotations
-500 = true    ; Embedded Images
+# Scrubbed parts codes to include in TEX scrub request
+# Each entry enables that content part for scrubbing
+# Disabled entries (false) are excluded from the scrub request
+1017 = true   # Custom Properties
+1018 = true   # Database Queries
+1019 = true   # Embedded Objects
+1021 = true   # Fast Save Data
+1025 = true   # Linked Objects
+1026 = true   # Macros and Code
+1034 = true   # Sensitive Hyperlinks
+1036 = true   # Statistic Properties
+1037 = true   # Summary Properties
+1137 = true   # PDF GoToR Actions
+1139 = true   # PDF Launch Actions
+1141 = true   # PDF URI Actions
+1142 = true   # PDF Sound Actions
+1143 = true   # PDF Movie Actions
+1150 = true   # PDF JavaScript Actions
+1151 = true   # PDF Submit Form Actions
+1178 = true   # PDF 3D Artwork Annotations
+500 = true    # Embedded Images
