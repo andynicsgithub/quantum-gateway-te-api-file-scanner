@@ -389,7 +389,8 @@ class TE(object):
                 self.logger.warning(f"TEX upload returned no response for {self.file_name}")
                 return
             
-            self.logger.debug(f"TEX upload response status: {upload_response.get('response', [{}])[0].get('status', {}).get('label', 'unknown')}")
+            scrub_info = upload_response.get('response', [{}])[0].get('scrub', {})
+            self.logger.debug(f"TEX upload response status: {scrub_info.get('scrub_result', 'unknown')}")
             
             tex = TEX(
                 self.file_name,
