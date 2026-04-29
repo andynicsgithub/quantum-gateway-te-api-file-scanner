@@ -61,13 +61,13 @@ Add the `[WATCHER]` section to your `config.ini`:
 ```ini
 [WATCHER]
 # Seconds to wait after last file activity before processing batch
-batch_delay = 5
+watch_batch_delay = 5
 
 # Minimum files to trigger batch (0 = process immediately after delay)
-min_batch_size = 0
+watch_min_batch = 0
 
 # Maximum batch size (0 = unlimited)
-max_batch_size = 0
+watch_max_batch = 0
 ```
 
 ### Command-Line Options
@@ -360,13 +360,13 @@ For continuous monitoring, add the `[WATCHER]` section to your `config.ini`:
 ```ini
 [WATCHER]
 # Seconds to wait after last file activity before processing batch
-batch_delay = 5
+watch_batch_delay = 5
 
 # Minimum files to trigger batch (0 = process immediately after delay)
-min_batch_size = 0
+watch_min_batch = 0
 
 # Maximum batch size (0 = unlimited)
-max_batch_size = 0
+watch_max_batch = 0
 ```
 
 ### Method 2: Environment Variables
