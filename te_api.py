@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v9.1 (alpha)
+te_api v9.2 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -131,7 +131,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v9.0 - Loading configuration...")
+    logger.info("TE API Scanner v9.2 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()

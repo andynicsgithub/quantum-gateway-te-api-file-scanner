@@ -1,4 +1,4 @@
-# This is config.ini.default v9.0 (alpha)
+# This is config.ini.default v9.2 (alpha)
 [DEFAULT]
 input_directory = /path/to/source/files
 reports_directory = /path/to/directory/for/report/files
