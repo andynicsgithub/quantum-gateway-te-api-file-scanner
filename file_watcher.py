@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v9.2 (alpha)
+file_watcher.py v10.0 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)

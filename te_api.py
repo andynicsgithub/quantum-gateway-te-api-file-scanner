@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
 """
-te_api v9.2 (alpha)
+te_api v10.0 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
-  - Handle TE and TE_EB processing via the appliance
+  - Handle TE, TE_EB and TEX (Scrub) processing via the appliance
   - Store results in an output directory
   - Support concurrent processing of multiple files (via command line argument or config.ini)
   - Move files from source directory to benign_directory, quarantine_directory, or error_directory based on TE verdict
@@ -13,6 +13,14 @@ Features:
   - Cross-platform support (Linux and Windows)
   - SMB/UNC network path support with retry logic
   - Watch mode: continuous monitoring of input directory with batch processing
+
+Changes in v10.0 over v9.2:
+  1. Added TEX (Threat Extraction / Scrub) processing alongside TE
+  2. TEX uses /UserCheck/TPAPI endpoint with separate URL and API key
+  3. TEX results written to tex_response_info/ and cleaned files to tex_clean_files/
+  4. TEX config: tex_enabled, tex_url, tex_api_key (config file, CLI, env vars)
+  5. TEX processing is non-blocking — errors do not stop TE flow
+  6. Watch mode and multiprocessing support TEX
 
 Changes in v9.2 over v9.1:
   1. Added password-protected zip archive creation for processed files
@@ -136,7 +144,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v9.2 - Loading configuration...")
+    logger.info("TE API Scanner v10.0 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()

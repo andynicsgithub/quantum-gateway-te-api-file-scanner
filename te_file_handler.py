@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v9.2 (alpha)
+te_file_handler v10.0 (alpha)
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
   - Uploads files to the TE appliance
-  - Queries TE and TE_EB results until final verdict
+  - Queries TE, TE_EB and TEX results until final verdict
   - Downloads TE reports for malicious files
   - Moves files to benign_directory, quarantine_directory, or error_directory based on verdict
   - Pretty-prints JSON response output
+  - Processes TEX (Scrub) results from upload response
+
+Changes in v10.0 over v9.2:
+  1. Added TEX (Threat Extraction/Scrub) result processing after upload
+  2. TE class accepts url_tex and tex_api_key parameters
+  3. TEX results written to tex_response_info/ and cleaned files to tex_clean_files/
+  4. TEX errors are non-blocking — TE processing continues on TEX failure
 
 Changes in v9.0 over v8.00:
   1. Added SMTP email notification integration support
