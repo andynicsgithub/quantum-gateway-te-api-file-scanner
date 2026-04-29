@@ -295,19 +295,28 @@ class TE(object):
         if self.final_status_label == "FOUND":
             self.logger.debug("move_file called")
             verdict = self.parse_verdict(self.final_response, "te")
+            # Get last path component robustly - works for UNC, local, trailing slashes
+            def get_dir_basename(path_obj):
+                p = str(path_obj).rstrip('/\\')
+                idx = max(p.rfind('/'), p.rfind('\\'))
+                return p[idx+1:] if idx >= 0 else p
+            self.logger.info(f"[ZIP] verdict={verdict}, dirs: benign={self.benign_directory!r} quarantine={self.quarantine_directory!r} error={self.error_directory!r}")
             if verdict == "Malicious":
-                basename = Path(self.quarantine_directory).name
+                basename = get_dir_basename(self.quarantine_directory)
+                self.logger.info(f"[ZIP] Malicious: basename={basename!r}")
                 self._add_to_zip(basename)
                 self.move_file(self.quarantine_directory)
                 self.parse_report_id(self.final_response)
                 if self.report_id != "":
                     self.download_report()
             elif verdict == "Benign":
-                basename = Path(self.benign_directory).name
+                basename = get_dir_basename(self.benign_directory)
+                self.logger.info(f"[ZIP] Benign: basename={basename!r}")
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
             elif verdict == "Error":
-                basename = Path(self.error_directory).name
+                basename = get_dir_basename(self.error_directory)
+                self.logger.info(f"[ZIP] Error: basename={basename!r}")
                 self._add_to_zip(basename)
                 self.move_file(self.error_directory)
                 

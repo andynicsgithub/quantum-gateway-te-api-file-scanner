@@ -328,13 +328,19 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
     # Collect results for email notification
     all_files = []
     
-    # Build temp directory and zip config for multiprocessing workers
+   # Build temp directory and zip config for multiprocessing workers
+    def _get_dir_basename(path_obj):
+        """Get last path component robustly for both local and UNC paths."""
+        p = str(path_obj).rstrip('/\\')
+        idx = max(p.rfind('/'), p.rfind('\\'))
+        return p[idx+1:] if idx >= 0 else p
+
     zip_config = None
     temp_dir = None
     verdict_basenames = [
-        Path(config.benign_directory).name,
-        Path(config.quarantine_directory).name,
-        Path(config.error_directory).name
+        _get_dir_basename(config.benign_directory),
+        _get_dir_basename(config.quarantine_directory),
+        _get_dir_basename(config.error_directory)
     ]
     if zip_mgr:
         temp_dir = str(Path(config.zip_archive_directory) / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}")
