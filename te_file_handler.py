@@ -295,23 +295,19 @@ class TE(object):
         if self.final_status_label == "FOUND":
             self.logger.debug("move_file called")
             verdict = self.parse_verdict(self.final_response, "te")
-            self.logger.info(f"[ZIP] verdict={verdict}, quarantine_dir={self.quarantine_directory}, benign_dir={self.benign_directory}, error_dir={self.error_directory}")
             if verdict == "Malicious":
-                basename = os.path.basename(str(self.quarantine_directory))
-                self.logger.info(f"[ZIP] Malicious: basename={basename!r}")
+                basename = os.path.basename(str(self.quarantine_directory).rstrip('/\\'))
                 self._add_to_zip(basename)
                 self.move_file(self.quarantine_directory)
                 self.parse_report_id(self.final_response)
                 if self.report_id != "":
                     self.download_report()
             elif verdict == "Benign":
-                basename = os.path.basename(str(self.benign_directory))
-                self.logger.info(f"[ZIP] Benign: basename={basename!r}")
+                basename = os.path.basename(str(self.benign_directory).rstrip('/\\'))
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
             elif verdict == "Error":
-                basename = os.path.basename(str(self.error_directory))
-                self.logger.info(f"[ZIP] Error: basename={basename!r}")
+                basename = os.path.basename(str(self.error_directory).rstrip('/\\'))
                 self._add_to_zip(basename)
                 self.move_file(self.error_directory)
                 

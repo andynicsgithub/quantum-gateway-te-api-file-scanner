@@ -332,9 +332,9 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
     zip_config = None
     temp_dir = None
     verdict_basenames = [
-        os.path.basename(str(config.benign_directory)),
-        os.path.basename(str(config.quarantine_directory)),
-        os.path.basename(str(config.error_directory))
+        os.path.basename(str(config.benign_directory).rstrip('/\\')),
+        os.path.basename(str(config.quarantine_directory).rstrip('/\\')),
+        os.path.basename(str(config.error_directory).rstrip('/\\'))
     ]
     if zip_mgr:
         temp_dir = str(Path(config.zip_archive_directory) / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}")
