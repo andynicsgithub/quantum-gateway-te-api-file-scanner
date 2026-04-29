@@ -318,28 +318,37 @@ class TE(object):
         """
         (Function description is within above class description)
         """
-        query_cache_response = self.check_te_cache()
-        cache_status_label = query_cache_response['response'][0]['status']['label']
-        if cache_status_label == "FOUND":
-            self.logger.debug("Results already exist in TE cache")
-            self.final_response = query_cache_response
-            self.final_status_label = cache_status_label
-        else:
-            self.logger.debug("No results in TE cache before upload")
-            upload_response = self.upload_file()
-            upload_status_label = upload_response["response"][0]["status"]["label"]
-            if upload_status_label == "UPLOAD_SUCCESS":
-                # Process TEX results from upload response if TEX is enabled
-                if self.url_tex and self.tex_api_key:
-                    self._process_tex_results(upload_response, self.config)
-                query_response = self.query_file()
-                query_status_label = query_response["response"][0]["status"]["label"]
-                self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
-                self.final_response = query_response
-                self.final_status_label = query_status_label
+        # If TEX is enabled, skip TE cache check and always upload so TEX can run
+        # TEX results only come from upload response, not from cache
+        skip_cache_check = bool(self.url_tex and self.tex_api_key)
+        
+        if not skip_cache_check:
+            query_cache_response = self.check_te_cache()
+            cache_status_label = query_cache_response['response'][0]['status']['label']
+            if cache_status_label == "FOUND":
+                self.logger.debug("Results already exist in TE cache")
+                self.final_response = query_cache_response
+                self.final_status_label = cache_status_label
+                self.create_response_info(self.final_response)
+                return
             else:
-                self.final_response = upload_response
-                self.final_status_label = upload_status_label
+                self.logger.debug("No results in TE cache before upload")
+        
+        # Upload the file
+        upload_response = self.upload_file()
+        upload_status_label = upload_response["response"][0]["status"]["label"]
+        if upload_status_label == "UPLOAD_SUCCESS":
+            # Process TEX results from upload response if TEX is enabled
+            if self.url_tex and self.tex_api_key:
+                self._process_tex_results(upload_response, self.config)
+            query_response = self.query_file()
+            query_status_label = query_response["response"][0]["status"]["label"]
+            self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
+            self.final_response = query_response
+            self.final_status_label = query_status_label
+        else:
+            self.final_response = upload_response
+            self.final_status_label = upload_status_label
         self.create_response_info(self.final_response)
 
         if self.final_status_label == "FOUND":
