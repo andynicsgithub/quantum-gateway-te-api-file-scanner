@@ -315,12 +315,21 @@ class TE(object):
         if not self.url_tex or not self.tex_api_key:
             return None
         
+        # Check if file type is enabled for TEX processing
+        file_ext = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
+        if config.tex_supported_file_types and file_ext not in config.tex_supported_file_types:
+            self.logger.info(f"Skipping TEX — file type not enabled: {self.file_name} ({file_ext})")
+            return None
+        
         try:
             self._setup_tex_directories(config)
             self.logger.info(f"Uploading to TPAPI for TEX processing: {self.url_tex}")
             
             md5 = self._set_file_md5()
             self.logger.debug(f"File MD5: {md5}")
+            
+            # Use configured scrubbed parts codes
+            scrubbed_parts = sorted(config.tex_scrubbed_parts_codes) if config.tex_scrubbed_parts_codes else [1018, 1019, 1021, 1025, 1026, 1034, 1137, 1139, 1141, 1142, 1143, 1150, 1151]
             
             # Build TPAPI upload request
             request = {
@@ -331,7 +340,7 @@ class TE(object):
                     "file_orig_name": self.file_name,
                     "te_options": {
                         "file_name": self.file_name,
-                        "file_type": self.file_name.rsplit('.', 1)[-1] if '.' in self.file_name else '',
+                        "file_type": file_ext,
                         "is_base64": True,
                         "features": ["te", "te_eb", "av"],
                         "te": {
@@ -340,7 +349,7 @@ class TE(object):
                     },
                     "scrub_options": {
                         "scrub_method": 1,
-                        "scrubbed_parts_codes": [1018, 1019, 1021, 1025, 1026, 1034, 1137, 1139, 1141, 1142, 1143, 1150, 1151],
+                        "scrubbed_parts_codes": scrubbed_parts,
                         "save_original_file_on_server": False
                     }
                 }]
@@ -381,6 +390,11 @@ class TE(object):
             config: ScannerConfig object with tex_* fields
         """
         if not self.url_tex or not self.tex_api_key:
+            return
+        
+        file_ext = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
+        if config.tex_supported_file_types and file_ext not in config.tex_supported_file_types:
+            self.logger.info(f"Skipping TEX — file type not enabled: {self.file_name} ({file_ext})")
             return
         
         try:

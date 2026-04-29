@@ -58,6 +58,8 @@ class ScannerConfig:
     tex_api_key: str = ''
     tex_response_info_directory: str = 'tex_response_info'
     tex_clean_files_directory: str = 'tex_clean_files'
+    tex_supported_file_types: set = field(default_factory=set)
+    tex_scrubbed_parts_codes: set = field(default_factory=set)
     
     # Logging configuration
     log_level: str = 'INFO'
@@ -175,7 +177,9 @@ class ScannerConfig:
             'tex_url': '',
             'tex_api_key': '',
             'tex_response_info_directory': 'tex_response_info',
-            'tex_clean_files_directory': 'tex_clean_files'
+            'tex_clean_files_directory': 'tex_clean_files',
+            'tex_supported_file_types': set(),
+            'tex_scrubbed_parts_codes': set()
         }
         
         # 2. Override with environment variables
@@ -264,6 +268,27 @@ class ScannerConfig:
                             config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                         else:
                             config_data[key] = value.strip()
+            
+            # Read from TEX_SUPPORTED_FILE_TYPES section
+            if 'TEX_SUPPORTED_FILE_TYPES' in parser:
+                section = parser['TEX_SUPPORTED_FILE_TYPES']
+                enabled_types = set()
+                for ext, value in section.items():
+                    if value.lower() in ['true', '1', 'yes', 'on']:
+                        enabled_types.add(ext.lower())
+                if enabled_types:
+                    config_data['tex_supported_file_types'] = enabled_types
+            
+            # Read from TEX_SCRUBBED_PARTS section
+            if 'TEX_SCRUBBED_PARTS' in parser:
+                section = parser['TEX_SCRUBBED_PARTS']
+                enabled_parts = set()
+                for code, value in section.items():
+                    val = value.split(';')[0].strip().lower()
+                    if val in ['true', '1', 'yes', 'on']:
+                        enabled_parts.add(int(code))
+                if enabled_parts:
+                    config_data['tex_scrubbed_parts_codes'] = enabled_parts
             
             # Read from EMAIL section
             if 'EMAIL' in parser:
@@ -430,6 +455,8 @@ class ScannerConfig:
             print(f"  API key set:           {'Yes' if self.tex_api_key else 'No'}")
             print(f"  Response info dir:     {self.tex_response_info_directory}")
             print(f"  Clean files dir:       {self.tex_clean_files_directory}")
+            print(f"  Supported file types:  {len(self.tex_supported_file_types)} enabled")
+            print(f"  Scrubbed parts:        {len(self.tex_scrubbed_parts_codes)} enabled")
         
         # Show path type warnings
         for name, path in [
