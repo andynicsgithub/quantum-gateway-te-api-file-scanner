@@ -287,28 +287,118 @@ class TE(object):
         self.tex_response_info_dir.mkdir(parents=True, exist_ok=True)
         self.tex_clean_files_dir.mkdir(parents=True, exist_ok=True)
     
-    def _process_tex_results(self, upload_response, config):
+    def _set_file_md5(self):
         """
-        Process TEX (Scrub) results from the upload response.
-        
-        Extracts scrub results, writes response info, and creates cleaned files
-        if TEX managed to scrub the file.
+        Calculates the file's md5 hash.
+        """
+        md5 = hashlib.md5()
+        with open(str(self.full_path), 'rb') as f:
+            while True:
+                block = f.read(2 ** 10)
+                if not block:
+                    break
+                md5.update(block)
+        return md5.hexdigest()
+    
+    def _upload_for_tex(self, config):
+        """
+        Upload file to the TPAPI endpoint for TEX (Scrub) processing.
+        This is a separate upload from the TE Cloud API upload.
+        TPAPI uses a different request format with scrub_options.
         
         Args:
-            upload_response: The upload response dict containing scrub results
+            config: ScannerConfig object
+            
+        Returns:
+            The upload response dict from TPAPI, or None on failure
+        """
+        if not self.url_tex or not self.tex_api_key:
+            return None
+        
+        try:
+            self._setup_tex_directories(config)
+            self.logger.info(f"Uploading to TPAPI for TEX processing: {self.url_tex}")
+            
+            md5 = self._set_file_md5()
+            self.logger.debug(f"File MD5: {md5}")
+            
+            # Build TPAPI upload request
+            request = {
+                "request": [{
+                    "protocol_version": "1.1",
+                    "api_key": self.tex_api_key,
+                    "request_name": "UploadFile",
+                    "file_orig_name": self.file_name,
+                    "te_options": {
+                        "file_name": self.file_name,
+                        "file_type": self.file_name.rsplit('.', 1)[-1] if '.' in self.file_name else '',
+                        "is_base64": True,
+                        "features": ["te", "te_eb", "av"],
+                        "te": {
+                            "reports": ["summary"]
+                        }
+                    },
+                    "scrub_options": {
+                        "scrub_method": 1,
+                        "scrubbed_parts_codes": [1018, 1019, 1021, 1025, 1026, 1034, 1137, 1139, 1141, 1142, 1143, 1150, 1151],
+                        "save_original_file_on_server": False
+                    }
+                }]
+            }
+            
+            # Encode file as base64
+            with open(str(self.full_path), 'rb') as f:
+                file_b64 = base64.b64encode(f.read()).decode("utf-8")
+            request['request'][0]['file_enc_data'] = str(file_b64)
+            
+            data = json.dumps(request)
+            
+            try:
+                response = requests.post(
+                    url=self.url_tex,
+                    data=data,
+                    verify=False,
+                    timeout=120
+                )
+            except Exception as E:
+                self.logger.error(f"TPAPI upload request failed: {E}")
+                return None
+            
+            response_j = response.json()
+            return response_j
+            
+        except Exception as E:
+            self.logger.error(f"TEX upload preparation failed for {self.file_name}: {E}", exc_info=True)
+            return None
+    
+    def _process_tex_results(self, config):
+        """
+        Upload file to TPAPI and process TEX (Scrub) results.
+        This is a separate flow from TE Cloud API processing.
+        
+        Args:
             config: ScannerConfig object with tex_* fields
         """
         if not self.url_tex or not self.tex_api_key:
             return
         
         try:
-            self._setup_tex_directories(config)
+            upload_response = self._upload_for_tex(config)
+            if upload_response is None:
+                self.logger.warning(f"TEX upload returned no response for {self.file_name}")
+                return
+            
+            self.logger.debug(f"TEX upload response status: {upload_response.get('response', [{}])[0].get('status', {}).get('label', 'unknown')}")
+            
             tex = TEX(
                 self.file_name,
                 self.tex_response_info_dir,
                 self.tex_clean_files_dir
             )
-            tex.process_results(upload_response)
+            is_cleaned = tex.process_results(upload_response)
+            if is_cleaned:
+                self.logger.info(f"TEX cleaned file: {tex.clean_file_name}")
+            
         except Exception as E:
             self.logger.warning(f"TEX processing failed for {self.file_name}: {E}")
             # TEX errors are non-blocking - continue with TE processing
@@ -318,38 +408,30 @@ class TE(object):
         """
         (Function description is within above class description)
         """
-        # If TEX is enabled, skip TE cache check and always upload so TEX can run
-        # TEX results only come from upload response, not from cache
-        skip_cache_check = bool(self.url_tex and self.tex_api_key)
-        
-        if not skip_cache_check:
-            query_cache_response = self.check_te_cache()
-            cache_status_label = query_cache_response['response'][0]['status']['label']
-            if cache_status_label == "FOUND":
-                self.logger.debug("Results already exist in TE cache")
-                self.final_response = query_cache_response
-                self.final_status_label = cache_status_label
-                self.create_response_info(self.final_response)
-                return
-            else:
-                self.logger.debug("No results in TE cache before upload")
-        
-        # Upload the file
-        upload_response = self.upload_file()
-        upload_status_label = upload_response["response"][0]["status"]["label"]
-        if upload_status_label == "UPLOAD_SUCCESS":
-            # Process TEX results from upload response if TEX is enabled
-            if self.url_tex and self.tex_api_key:
-                self._process_tex_results(upload_response, self.config)
-            query_response = self.query_file()
-            query_status_label = query_response["response"][0]["status"]["label"]
-            self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
-            self.final_response = query_response
-            self.final_status_label = query_status_label
+        query_cache_response = self.check_te_cache()
+        cache_status_label = query_cache_response['response'][0]['status']['label']
+        if cache_status_label == "FOUND":
+            self.logger.debug("Results already exist in TE cache")
+            self.final_response = query_cache_response
+            self.final_status_label = cache_status_label
         else:
-            self.final_response = upload_response
-            self.final_status_label = upload_status_label
+            self.logger.debug("No results in TE cache before upload")
+            upload_response = self.upload_file()
+            upload_status_label = upload_response["response"][0]["status"]["label"]
+            if upload_status_label == "UPLOAD_SUCCESS":
+                query_response = self.query_file()
+                query_status_label = query_response["response"][0]["status"]["label"]
+                self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
+                self.final_response = query_response
+                self.final_status_label = query_status_label
+            else:
+                self.final_response = upload_response
+                self.final_status_label = upload_status_label
         self.create_response_info(self.final_response)
+        
+        # Process TEX via separate TPAPI upload (independent of TE Cloud flow)
+        if self.url_tex and self.tex_api_key:
+            self._process_tex_results(self.config)
 
         if self.final_status_label == "FOUND":
             self.logger.debug("move_file called")
