@@ -321,30 +321,39 @@ class TE(object):
         Args:
             verdict_basename: Directory name inside zip (e.g. 'benign', 'quarantine', 'error').
         """
+        self.logger.info(f"[ZIP] _add_to_zip called for {self.file_name}, zip_config type={type(self.zip_config).__name__}, basename={verdict_basename}")
+        
         if self.zip_config is None:
+            self.logger.warning(f"[ZIP] zip_config is None, skipping {self.file_name}")
             return
         
         if not verdict_basename:
+            self.logger.warning(f"[ZIP] verdict_basename is empty, skipping {self.file_name}")
             return
         
         # Single-process mode (watch mode): ZipArchiveManager instance
         if isinstance(self.zip_config, ZipArchiveManager):
-            self.logger.debug(f"Adding {self.file_name} to zip archive")
+            self.logger.info(f"[ZIP] Single-process mode: adding {self.file_name} directly to zip")
             self.zip_config.add_file(self.full_path, verdict_basename, self.sub_dir, self.file_name)
             return
         
         # Multiprocessing mode: copy to temp directory for consolidation
         if not isinstance(self.zip_config, (list, tuple)):
+            self.logger.warning(f"[ZIP] zip_config is not a ZipArchiveManager or tuple: {type(self.zip_config)}, skipping {self.file_name}")
             return
         
         # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, 
         #              error_basename, temp_dir)
         if len(self.zip_config) < 6:
+            self.logger.warning(f"[ZIP] zip_config has only {len(self.zip_config)} elements, expected 6, skipping {self.file_name}")
             return
         
         temp_dir = self.zip_config[5]
         if not temp_dir:
+            self.logger.warning(f"[ZIP] temp_dir is empty, skipping {self.file_name}")
             return
+        
+        self.logger.info(f"[ZIP] Multiprocessing mode: copying {self.file_name} to temp dir: {temp_dir}")
         
         try:
             dest_path = Path(temp_dir) / verdict_basename / self.sub_dir

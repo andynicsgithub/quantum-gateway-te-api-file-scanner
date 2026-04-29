@@ -340,6 +340,7 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
         temp_dir = str(Path(config.zip_archive_directory) / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}")
         os.makedirs(temp_dir, exist_ok=True)
         logger.info(f"Zip temp directory: {temp_dir}")
+        logger.info(f"Zip config tuple: {zip_config is not None}, len={len(zip_config) if zip_config else 0}")
         zip_config = (
             str(zip_mgr.zip_path),
             config.zip_password,
@@ -443,7 +444,7 @@ def process_files(file_name, sub_dir, full_path, config, url, zip_config=None):
     logger = logging.getLogger('te_scanner.main')
     result = {'name': file_name, 'path': sub_dir if sub_dir else '', 'verdict': 'Unknown', 'status': 'error'}
     try:
-        logger.info(f"Handling file: {file_name}")
+        logger.info(f"Handling file: {file_name} (zip_config type={type(zip_config).__name__})")
         te = TE(
             url, 
             file_name, 
