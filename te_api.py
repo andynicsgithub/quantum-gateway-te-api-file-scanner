@@ -322,7 +322,6 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
         zip_mgr: ZipArchiveManager instance (None if disabled)
     """
     from notification import send_batch_notification
-    import tempfile as stdlib_tempfile
     
     logger = logging.getLogger('te_scanner.main')
     
@@ -338,7 +337,9 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
         os.path.basename(str(config.error_directory))
     ]
     if zip_mgr:
-        temp_dir = stdlib_tempfile.mkdtemp(prefix='te_zip_', dir=str(config.zip_archive_directory))
+        temp_dir = str(Path(config.zip_archive_directory) / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}")
+        os.makedirs(temp_dir, exist_ok=True)
+        logger.info(f"Zip temp directory: {temp_dir}")
         zip_config = (
             str(zip_mgr.zip_path),
             config.zip_password,

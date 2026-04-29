@@ -349,10 +349,16 @@ class TE(object):
         try:
             dest_path = Path(temp_dir) / verdict_basename / self.sub_dir
             dest_path.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(str(self.full_path), str(dest_path / self.file_name))
-            self.logger.debug(f"Copied {self.file_name} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.file_name}")
+            dest_file = dest_path / self.file_name
+            with open(str(self.full_path), 'rb') as src_f, open(str(dest_file), 'wb') as dst_f:
+                while True:
+                    chunk = src_f.read(65536)
+                    if not chunk:
+                        break
+                    dst_f.write(chunk)
+            self.logger.info(f"Copied {self.file_name} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.file_name}")
         except Exception as e:
-            self.logger.error(f"Failed to copy {self.file_name} to temp for zip: {e}")
+            self.logger.error(f"Failed to copy {self.file_name} to temp for zip: {e}", exc_info=True)
     
     def move_file(self, destination_directory):
         """
