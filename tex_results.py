@@ -72,43 +72,54 @@ class TEX(object):
         self.scrub_result = -1
         self.logger = logging.getLogger('te_scanner.tex')
     
+    def _fallback_filename(self):
+        """
+        Build cleaned filename by inserting .cleaned before the original extension.
+        """
+        match = re.match(r'^(.+?)(\.[^.]+)?$', self.file_name)
+        if match:
+            base = match.group(1)
+            old_ext = match.group(2) or ""
+            self.clean_file_name = f"{base}.cleaned{old_ext}"
+        else:
+            self.clean_file_name = f"{self.file_name}.cleaned"
+    
     def create_clean_file(self, response=None):
         """
         Decode the cleaned file content received as base64 in the response and
-        write it to a new file with .cleaned filename pattern in tex_clean_files/.
+        write it to a new file in tex_clean_files/.
         
-        If response is provided, the new extension is extracted from the scrub response
-        (e.g. docm -> docx). Otherwise the original extension is used.
+        If output_file_name is provided in the scrub response, use it directly
+        as the cleaned filename. Otherwise, fall back to inserting .cleaned
+        before the original extension.
         
-        Example: "document.pdf" -> "document.cleaned.pdf"
-        Example: "macro.docm" + new_extension=".docx" -> "macro.cleaned.docx"
+        Examples:
+            "document.pdf" -> "document.cleaned.pdf"
+            "macro.docm" with output_file_name="macro.cleaned.docx" -> "macro.cleaned.docx"
         
         Returns:
             Path to the created cleaned file
         """
         text = base64.b64decode(self.clean_file_data)
         
-        # Determine the new extension for cleaned file.
-        # Some file types have their extension changed by TEX scrub (e.g. docm -> docx).
-        # If a new extension is provided in the scrub response, use it.
-        # Otherwise insert .cleaned before the original extension.
+        # Try to get the full cleaned filename from the API response first
         if response is not None:
             scrub = response["response"][0]["scrub"]
-            new_ext = scrub.get("new_extension", "")
-        else:
-            new_ext = self._new_extension
-
-        # Build cleaned filename
-        match = re.match(r'^(.+?)(\.[^.]+)?$', self.file_name)
-        if match:
-            base = match.group(1)
-            old_ext = match.group(2) or ""
-            if new_ext:
-                self.clean_file_name = f"{base}.cleaned{new_ext}"
+            api_file_name = scrub.get("output_file_name", "")
+            if api_file_name:
+                self.clean_file_name = api_file_name
             else:
-                self.clean_file_name = f"{base}.cleaned{old_ext}"
+                self._fallback_filename()
         else:
-            self.clean_file_name = f"{self.file_name}.cleaned"
+            if self._new_extension:
+                match = re.match(r'^(.+?)(\.[^.]+)?$', self.file_name)
+                if match:
+                    base = match.group(1)
+                    self.clean_file_name = f"{base}.cleaned{self._new_extension}"
+                else:
+                    self.clean_file_name = f"{self.file_name}.cleaned"
+            else:
+                self._fallback_filename()
         
         output_path = self.output_folder_tex_clean_files / self.clean_file_name
         output_path.parent.mkdir(parents=True, exist_ok=True)
