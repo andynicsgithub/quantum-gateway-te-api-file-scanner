@@ -357,8 +357,9 @@ class TE(object):
                 response = requests.post(
                     url=self.url_tex,
                     data=data,
+                    headers={'Content-Type': 'application/json'},
                     verify=False,
-                    timeout=120
+                    timeout=300
                 )
             except Exception as E:
                 self.logger.error(f"TPAPI upload request failed: {E}")
