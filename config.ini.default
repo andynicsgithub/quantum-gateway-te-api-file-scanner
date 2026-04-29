@@ -45,3 +45,5 @@ backup_count = 5
 tex_enabled = false
 tex_url =
 tex_api_key =
+tex_response_info_directory = tex_response_info
+tex_clean_files_directory = tex_clean_files

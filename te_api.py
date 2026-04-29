@@ -480,7 +480,8 @@ def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_co
             config.quarantine_directory, 
             config.error_directory,
             tex_api_key=config.tex_api_key,
-            zip_config=zip_config
+            zip_config=zip_config,
+            config=config
         )
         te.handle_file()
         

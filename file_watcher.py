@@ -382,7 +382,8 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                     config.quarantine_directory,
                     config.error_directory,
                     tex_api_key=config.tex_api_key,
-                    zip_config=batch_zip_mgr if batch_zip_mgr else None
+                    zip_config=batch_zip_mgr if batch_zip_mgr else None,
+                    config=config
                 )
                 te.handle_file()
                 
