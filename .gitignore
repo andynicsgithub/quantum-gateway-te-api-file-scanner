@@ -39,3 +39,7 @@ logs/
 *~
 .DS_Store
 Thumbs.db
+
+# Local reset scripts (not tracked)
+reset_directories.ps1
+reset_directories.sh
