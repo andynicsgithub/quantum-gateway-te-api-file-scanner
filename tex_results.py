@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-tex_results.py
+tex_results.py v10.0 (alpha)
 Handles TEX (Threat Extraction / Scrub) results from file upload responses.
 Extracts scrub results, writes response info, and creates cleaned files when TEX
 manages to scrub the file.

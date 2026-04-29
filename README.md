@@ -1,6 +1,6 @@
 # te_api
 
-**Version 8.0** - Cross-platform Python client for Check Point Threat Emulation API
+**Version 10.0** - Cross-platform Python client for Check Point Threat Emulation API
 
 A Python client side utility for using Threat Emulation API calls to an on-premises Check Point gateway (or Threat Emulation appliance). **Now with full Windows and Linux support, including SMB/UNC network paths and continuous directory monitoring.**
 
@@ -205,6 +205,74 @@ python te_api.py --watch --email-enabled --email-smtp-server 10.1.48.103 --email
 
 **Note:** Email notifications require the `[EMAIL]` section to be properly configured in `config.ini` with the correct key names (`email_enabled`, `email_smtp_server`, etc.). Keys without the `email_` prefix will not be recognized.
 
+### TEX (Threat Extraction / Scrub)
+
+TEX is an additional processing path that runs alongside the standard TE Cloud API. Files are uploaded to a separate TPAPI endpoint where they are "scrubbed" of potentially malicious content, and a cleaned version is returned. TEX is fully independent of TE — errors do not stop the TE flow.
+
+**Configuration in config.ini:**
+
+```ini
+[TEX]
+tex_enabled = true
+tex_url = https://10.1.46.85/UserCheck/TPAPI
+tex_api_key = hkPBkzSnx94mU1ASD4yPF936PW6TqQ45
+tex_response_info_directory = tex_response_info
+tex_clean_files_directory = tex_clean_files
+
+[TEX_SUPPORTED_FILE_TYPES]
+; Extensions to send to TEX API (enable/disable individually)
+; Empty section or missing entry = skip all file types
+bmp = true
+doc = true
+docm = true
+docx = true
+pdf = true
+...
+
+[TEX_SCRUBBED_PARTS]
+; Which content parts to scrub (enable/disable individually)
+; Disabled entries (false) are excluded from the scrub request
+1017 = true   ; Custom Properties
+1018 = true   ; Database Queries
+1019 = true   ; Embedded Objects
+...
+```
+
+**Configuration Options:**
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| `tex_enabled` | Enable TEX processing | false |
+| `tex_url` | TPAPI endpoint URL | - |
+| `tex_api_key` | API key for TPAPI | - |
+| `tex_response_info_directory` | Directory for TEX response info files | tex_response_info |
+| `tex_clean_files_directory` | Directory for cleaned/scrubbed files | tex_clean_files |
+
+**TEX Supported File Types:** The `[TEX_SUPPORTED_FILE_TYPES]` section defines which file extensions are sent to TEX. Files with extensions not listed (or set to `false`) are skipped from TEX processing but still go through the standard TE flow. If the section is empty or missing, no files are sent to TEX.
+
+**TEX Scrubbed Parts Codes:** The `[TEX_SCRUBBED_PARTS]` section defines which content parts are scrubbed. Each code corresponds to a content type (e.g., `1026` = Macros and Code, `1141` = PDF URI Actions). Disabled parts are excluded from the scrub request. If the section is empty or missing, all parts are scrubbed.
+
+**TEX Output:**
+- Cleaned files are written to `tex_clean_files_directory/` with the name returned by the API (e.g., `document.cleaned.docx`)
+- Response info is written to `tex_response_info/` with the filename `filename.response.txt`
+- TEX errors are non-blocking — TE processing continues on TEX failure
+
+**Command-Line Options:**
+
+| Option | Description |
+|--------|-------------|
+| `--tex-enabled` | Enable TEX processing |
+| `--tex-url URL` | TPAPI endpoint URL |
+| `--tex-api-key KEY` | API key for TPAPI |
+| `--tex-response-info-dir DIR` | Directory for TEX response info files |
+| `--tex-clean-files-dir DIR` | Directory for cleaned/scrubbed files |
+
+**Example:**
+
+```bash
+python te_api.py --tex-enabled --tex-url https://10.1.46.85/UserCheck/TPAPI --tex-api-key hkPBkzSnx94mU1ASD4yPF936PW6TqQ45
+```
+
 ### The flow
 Going through the input directory and handling each file in order to get its Threat Emulation results.
 Directory tree structure below the input directory will be reproduced in the bening directory.
@@ -356,11 +424,16 @@ usage: te_api.py [-h] [-in INPUT_DIRECTORY] [-rep REPORTS_DIRECTORY]
     --email-smtp-port      SMTP server port (default: 587)
     --email-use-tls        Use TLS for SMTP connection
     --email-username       SMTP authentication username
-    --email-password       SMTP authentication password
+   --email-password       SMTP authentication password
     --email-from           Sender email address
     --email-to             Recipient email address
     --email-verbose        Include detailed file list with verdicts
-```
+    --tex-enabled           Enable TEX processing
+    --tex-url URL          TPAPI endpoint URL
+    --tex-api-key KEY      API key for TPAPI
+    --tex-response-info-dir DIR  Directory for TEX response info files
+    --tex-clean-files-dir DIR      Directory for cleaned/scrubbed files
+    ```
 
 **Configuration Priority** (highest to lowest):
 1. Command-line arguments
