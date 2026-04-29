@@ -62,6 +62,23 @@ def send_batch_notification(config, summary):
         logger.warning(f"Failed to send email notification: {e}")
 
 
+def _get_tex_status_message(tex_status):
+    """
+    Convert TEX status code to a human-readable message for email display.
+    
+    Returns:
+        str: TEX status message, or empty string if TEX wasn't processed
+    """
+    if tex_status == 'cleaned':
+        return 'removed parts'
+    elif tex_status == 'not_cleaned':
+        return 'didn\'t find anything to remove'
+    elif tex_status == 'unsupported':
+        return 'unsupported file type'
+    else:
+        return ''
+
+
 def _build_email_body(config, summary, verbose=False):
     """Build the email body text."""
     timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC')
@@ -86,11 +103,16 @@ def _build_email_body(config, summary, verbose=False):
             path = f['path']
             name = f['name']
             verdict = f['verdict']
+            tex_status = f.get('tex_status')
             if path:
                 file_display = f'{path}/{name}'
             else:
                 file_display = name
-            lines.append(f'  {file_display} - {verdict}')
+            tex_msg = _get_tex_status_message(tex_status)
+            if tex_msg:
+                lines.append(f'  {file_display} - {verdict} and TEX {tex_msg}')
+            else:
+                lines.append(f'  {file_display} - {verdict}')
         lines.append('')
     
     if summary['malicious_files']:

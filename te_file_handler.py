@@ -101,6 +101,7 @@ class TE(object):
         self.final_response = ""
         self.final_status_label = ""
         self.report_id = ""
+        self._tex_status = None
         self.logger = logging.getLogger('te_scanner.file_handler')
         self.request_template = {
             "request": [{
@@ -386,14 +387,22 @@ class TE(object):
         Upload file to TPAPI and process TEX (Scrub) results.
         This is a separate flow from TE Cloud API processing.
         
+        Sets self._tex_status to:
+            'cleaned'     - TEX successfully removed malicious parts
+            'not_cleaned' - TEX processed but found nothing to remove
+            'unsupported' - File type not supported by TEX
+        None = TEX was not processed
+        
         Args:
             config: ScannerConfig object with tex_* fields
         """
         if not self.url_tex or not self.tex_api_key:
+            self._tex_status = None
             return
         
         file_ext = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
         if config.tex_supported_file_types and file_ext not in config.tex_supported_file_types:
+            self._tex_status = 'unsupported'
             self.logger.info(f"Skipping TEX — file type not enabled: {self.file_name} ({file_ext})")
             return
         
@@ -413,7 +422,11 @@ class TE(object):
             )
             is_cleaned = tex.process_results(upload_response)
             if is_cleaned:
+                self._tex_status = 'cleaned'
                 self.logger.info(f"TEX cleaned file: {tex.clean_file_name}")
+            else:
+                self._tex_status = 'not_cleaned'
+                self.logger.info(f"TEX processed but found nothing to remove: {self.file_name}")
             
         except Exception as E:
             self.logger.warning(f"TEX processing failed for {self.file_name}: {E}")

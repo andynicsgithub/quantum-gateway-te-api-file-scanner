@@ -485,6 +485,8 @@ def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_co
         )
         te.handle_file()
         
+        result['tex_status'] = te._tex_status
+        
         if te.final_status_label == "FOUND":
             verdict = te.parse_verdict(te.final_response, "te")
             result['verdict'] = verdict

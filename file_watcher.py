@@ -395,7 +395,8 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                     batch_summary['all_files'].append({
                         'name': file_name,
                         'path': sub_dir if sub_dir else '',
-                        'verdict': verdict
+                        'verdict': verdict,
+                        'tex_status': te._tex_status
                     })
                     if verdict == "Malicious":
                         batch_summary['malicious'] += 1
@@ -411,7 +412,8 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                     batch_summary['all_files'].append({
                         'name': file_name,
                         'path': sub_dir if sub_dir else '',
-                        'verdict': te.final_status_label if te.final_status_label else 'Not_Found'
+                        'verdict': te.final_status_label if te.final_status_label else 'Not_Found',
+                        'tex_status': te._tex_status
                     })
                     batch_summary['error'] += 1
                 
@@ -421,7 +423,8 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                 batch_summary['all_files'].append({
                     'name': file_name,
                     'path': sub_dir if sub_dir else '',
-                    'verdict': 'Error'
+                    'verdict': 'Error',
+                    'tex_status': None
                 })
                 # Try to move to error directory manually
                 try:
