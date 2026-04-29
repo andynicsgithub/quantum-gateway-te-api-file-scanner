@@ -113,6 +113,11 @@ def main():
     # Zip archive CLI args
     parser.add_argument('-za', '--zip_archive_directory', help='Directory to store password-protected zip archives of processed files')
     parser.add_argument('--zip_password', help='Password for zip archives (empty or not provided = no zip archive)')
+    
+    # TEX (Scrub) CLI args
+    parser.add_argument('--tex-enabled', action='store_true', help='Enable TEX (Threat Extraction/Scrub) processing')
+    parser.add_argument('--tex-url', help='TEX API URL (e.g., https://appliance-ip/UserCheck/TPAPI)')
+    parser.add_argument('--tex-api-key', help='TEX API key')
     args = parser.parse_args()
     
     # =======================
@@ -147,8 +152,10 @@ def main():
     
     logger.info("Configuration validated successfully")
     
-    # Build API URL
+    # Build API URLs
     url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/"
+    
+    url_tex = config.tex_url
     
     # Warn about Windows long path support if applicable
     if PathHandler.is_windows() and not PathHandler.supports_long_paths():
@@ -198,7 +205,7 @@ def main():
         archive_files, other_files = discover_files(config.input_directory)
         if archive_files or other_files:
             logger.info(f"Processing {len(archive_files) + len(other_files)} existing files...")
-            process_discovered_files(archive_files, other_files, config, url, zip_mgr)
+            process_discovered_files(archive_files, other_files, config, url, url_tex, zip_mgr)
             find_and_delete_empty_subdirectories(config.input_directory)
             if zip_mgr:
                 zip_mgr.close()
@@ -210,7 +217,7 @@ def main():
         # Start watching (blocking call)
         from file_watcher import start_watching
         try:
-            start_watching(config, url, zip_mgr)
+            start_watching(config, url, url_tex, zip_mgr)
         except Exception as e:
             logger.error(f"ERROR starting watcher: {e}")
             import traceback
@@ -245,7 +252,7 @@ def main():
             return 0
         
         # Process files
-        process_discovered_files(archive_files, other_files, config, url, zip_mgr)
+        process_discovered_files(archive_files, other_files, config, url, url_tex, zip_mgr)
         find_and_delete_empty_subdirectories(config.input_directory)
         
         if zip_mgr:
@@ -305,7 +312,7 @@ def discover_files(input_directory):
     
     return archive_files, other_files
 
-def process_discovered_files(archive_files, other_files, config, url, zip_mgr=None):
+def process_discovered_files(archive_files, other_files, config, url, url_tex='', zip_mgr=None):
     """
     Process discovered files using the existing processing logic.
     
@@ -319,6 +326,7 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
         other_files: Set of (file_name, sub_dir, full_path) tuples
         config: ScannerConfig object
         url: TE API URL
+        url_tex: TEX API URL (may be empty if TEX disabled)
         zip_mgr: ZipArchiveManager instance (None if disabled)
     """
     from notification import send_batch_notification
@@ -359,7 +367,7 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
     # Non-archive files: parallel processing (workers copy to temp dir)
     if len(other_files) > 0:
         logger.info(f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}")
-        process_func = partial(process_files, config=config, url=url, zip_config=zip_config)
+        process_func = partial(process_files, config=config, url=url, url_tex=url_tex, zip_config=zip_config)
         
         with multiprocessing.Pool(config.concurrency) as pool:
             results = pool.starmap(process_func, other_files)
@@ -370,7 +378,7 @@ def process_discovered_files(archive_files, other_files, config, url, zip_mgr=No
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, sub_dir, full_path = file_info
-            result = process_files(file_name, sub_dir, full_path, config, url, zip_config=zip_mgr)
+            result = process_files(file_name, sub_dir, full_path, config, url, url_tex, zip_config=zip_mgr)
             all_files.append(result)
     
     # Consolidate temp directory files into the zip (multiprocessing mode)
@@ -424,7 +432,7 @@ def find_and_delete_empty_subdirectories(input_directory):
                 except Exception as e:
                     logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
 
-def process_files(file_name, sub_dir, full_path, config, url, zip_config=None):
+def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_config=None):
     """
     Process a single file through the TE API.
     
@@ -434,6 +442,7 @@ def process_files(file_name, sub_dir, full_path, config, url, zip_config=None):
         full_path: Full path to the file
         config: ScannerConfig object
         url: TE API URL
+        url_tex: TEX API URL (may be empty if TEX disabled)
         zip_config: Tuple of (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
         
     Returns:
@@ -453,6 +462,7 @@ def process_files(file_name, sub_dir, full_path, config, url, zip_config=None):
         logger.info(f"Handling file: {file_name} (zip_config type={type(zip_config).__name__})")
         te = TE(
             url, 
+            url_tex,
             file_name, 
             sub_dir, 
             full_path, 
@@ -461,6 +471,7 @@ def process_files(file_name, sub_dir, full_path, config, url, zip_config=None):
             config.benign_directory, 
             config.quarantine_directory, 
             config.error_directory,
+            tex_api_key=config.tex_api_key,
             zip_config=zip_config
         )
         te.handle_file()

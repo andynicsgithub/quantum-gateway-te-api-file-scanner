@@ -300,13 +300,14 @@ class WatcherThread:
         return self.watcher.get_pending_count()
 
 
-def start_watching(config, url, initial_zip_mgr=None):
+def start_watching(config, url, url_tex='', initial_zip_mgr=None):
     """
     Start file watching (blocking call).
     
     Args:
         config: ScannerConfig object
         url: TE API URL
+        url_tex: TEX API URL (may be empty if TEX disabled)
         initial_zip_mgr: ZipArchiveManager for pre-existing files (None = not applicable)
     """
     logger = logging.getLogger('te_scanner.watcher')
@@ -371,6 +372,7 @@ def start_watching(config, url, initial_zip_mgr=None):
                 # Create TE instance and process
                 te = TE(
                     url,
+                    url_tex,
                     file_name,
                     sub_dir,
                     full_path,
@@ -379,6 +381,7 @@ def start_watching(config, url, initial_zip_mgr=None):
                     config.benign_directory,
                     config.quarantine_directory,
                     config.error_directory,
+                    tex_api_key=config.tex_api_key,
                     zip_config=batch_zip_mgr if batch_zip_mgr else None
                 )
                 te.handle_file()

@@ -52,6 +52,11 @@ class ScannerConfig:
     zip_archive_directory: Path = field(default_factory=lambda: Path('test_zip_archives'))
     zip_password: str = ''
     
+    # TEX (Scrub) configuration
+    tex_enabled: bool = False
+    tex_url: str = ''
+    tex_api_key: str = ''
+    
     # Logging configuration
     log_level: str = 'INFO'
     log_dir: Path = field(default_factory=lambda: Path('logs'))
@@ -163,7 +168,10 @@ class ScannerConfig:
             'email_to': '',
             'email_verbose': False,
             'zip_archive_directory': 'test_zip_archives',
-            'zip_password': ''
+            'zip_password': '',
+            'tex_enabled': False,
+            'tex_url': '',
+            'tex_api_key': ''
         }
         
         # 2. Override with environment variables
@@ -241,6 +249,18 @@ class ScannerConfig:
                         else:
                             config_data[key] = value
             
+            # Read from TEX section
+            if 'TEX' in parser:
+                section = parser['TEX']
+                
+                for key in config_data.keys():
+                    if key in section:
+                        value = section[key]
+                        if key in ['tex_enabled']:
+                            config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
+                        else:
+                            config_data[key] = value
+            
             # Read from EMAIL section
             if 'EMAIL' in parser:
                 section = parser['EMAIL']
@@ -310,6 +330,14 @@ class ScannerConfig:
                 config_data['zip_archive_directory'] = cli_args.zip_archive_directory
             if hasattr(cli_args, 'zip_password') and cli_args.zip_password is not None:
                 config_data['zip_password'] = cli_args.zip_password
+            
+            # TEX CLI args
+            if hasattr(cli_args, 'tex_enabled') and cli_args.tex_enabled:
+                config_data['tex_enabled'] = cli_args.tex_enabled
+            if hasattr(cli_args, 'tex_url') and cli_args.tex_url:
+                config_data['tex_url'] = cli_args.tex_url
+            if hasattr(cli_args, 'tex_api_key') and cli_args.tex_api_key:
+                config_data['tex_api_key'] = cli_args.tex_api_key
         
         # Normalize all paths
         path_keys = ['input_directory', 'reports_directory', 'benign_directory',
@@ -386,6 +414,12 @@ class ScannerConfig:
         print("Zip Archive:")
         print(f"  Archive directory:     {self.zip_archive_directory}")
         print(f"  Password set:          {'Yes' if self.zip_password else 'No'}")
+        
+        print("TEX (Scrub):")
+        print(f"  Enabled:               {'Yes' if self.tex_enabled else 'No'}")
+        if self.tex_enabled:
+            print(f"  URL:                   {self.tex_url}")
+            print(f"  API key set:           {'Yes' if self.tex_api_key else 'No'}")
         
         # Show path type warnings
         for name, path in [

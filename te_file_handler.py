@@ -52,6 +52,7 @@ import logging
 from pathlib import Path
 from path_handler import PathHandler
 from zip_archive import ZipArchiveManager
+from tex_results import TEX
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -71,8 +72,9 @@ class TE(object):
      3. Write the TE results (last query/upload response info) into the output folder.
           If resulted TE verdict is malicious then also download the TE report and write it into the output folder.
     """
-    def __init__(self, url, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory, zip_config=None):
+    def __init__(self, url, url_tex, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory, tex_api_key='', zip_config=None):
         self.url = url
+        self.url_tex = url_tex
         self.file_name = file_name
         self.sub_dir = sub_dir
         # Convert to Path objects for cross-platform compatibility
@@ -82,6 +84,7 @@ class TE(object):
         self.benign_directory = Path(benign_directory) if not isinstance(benign_directory, Path) else benign_directory
         self.quarantine_directory = Path(quarantine_directory) if not isinstance(quarantine_directory, Path) else quarantine_directory
         self.error_directory = Path(error_directory) if not isinstance(error_directory, Path) else error_directory
+        self.tex_api_key = tex_api_key
         # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
         # For multiprocessing: passed as tuple since ZipArchiveManager can't be shared across processes
         # For watch mode (single process): can be a ZipArchiveManager instance
@@ -267,6 +270,41 @@ class TE(object):
             self.logger.error("Downloading TE report failed:  {} ".format(E))
 
 
+    def _setup_tex_directories(self):
+        """
+        Create TEX output directories under reports_directory.
+        """
+        self.tex_response_info_dir = self.reports_directory / 'tex_response_info'
+        self.tex_clean_files_dir = self.reports_directory / 'tex_clean_files'
+        self.tex_response_info_dir.mkdir(parents=True, exist_ok=True)
+        self.tex_clean_files_dir.mkdir(parents=True, exist_ok=True)
+    
+    def _process_tex_results(self, upload_response):
+        """
+        Process TEX (Scrub) results from the upload response.
+        
+        Extracts scrub results, writes response info, and creates cleaned files
+        if TEX managed to scrub the file.
+        
+        Args:
+            upload_response: The upload response dict containing scrub results
+        """
+        if not self.url_tex or not self.tex_api_key:
+            return
+        
+        try:
+            self._setup_tex_directories()
+            tex = TEX(
+                self.file_name,
+                self.tex_response_info_dir,
+                self.tex_clean_files_dir
+            )
+            tex.process_results(upload_response)
+        except Exception as E:
+            self.logger.warning(f"TEX processing failed for {self.file_name}: {E}")
+            # TEX errors are non-blocking - continue with TE processing
+
+
     def handle_file(self):
         """
         (Function description is within above class description)
@@ -282,6 +320,9 @@ class TE(object):
             upload_response = self.upload_file()
             upload_status_label = upload_response["response"][0]["status"]["label"]
             if upload_status_label == "UPLOAD_SUCCESS":
+                # Process TEX results from upload response if TEX is enabled
+                if self.url_tex and self.tex_api_key:
+                    self._process_tex_results(upload_response)
                 query_response = self.query_file()
                 query_status_label = query_response["response"][0]["status"]["label"]
                 self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
