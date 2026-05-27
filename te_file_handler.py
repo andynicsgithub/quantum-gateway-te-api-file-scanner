@@ -357,13 +357,17 @@ class TE(object):
             }
             
             # Encode file as base64
+            self.logger.info(f"Reading file {self.file_name} for TEX upload ({self.full_path.stat().st_size:,} bytes)")
             with open(str(self.full_path), 'rb') as f:
                 file_b64 = base64.b64encode(f.read()).decode("utf-8")
+            self.logger.info(f"Base64 encoding complete for {self.file_name} ({len(file_b64):,} bytes)")
             request['request'][0]['file_enc_data'] = str(file_b64)
             
-            data = json.dumps(request)
+            data = json.dumps(request, ensure_ascii=False)
+            self.logger.info(f"JSON serialization complete for {self.file_name} ({len(data):,} bytes total)")
             
             try:
+                self.logger.info(f"Sending TEX upload request for {self.file_name} to {self.url_tex}")
                 response = requests.post(
                     url=self.url_tex,
                     data=data,
@@ -371,8 +375,9 @@ class TE(object):
                     verify=False,
                     timeout=300
                 )
+                self.logger.info(f"TEX upload response received for {self.file_name} (status {response.status_code})")
             except Exception as E:
-                self.logger.error(f"TPAPI upload request failed: {E}")
+                self.logger.error(f"TEX upload request failed for {self.file_name}: {E}", exc_info=True)
                 return None
             
             response_j = response.json()
