@@ -401,7 +401,7 @@ class TE(object):
         Args:
             config: ScannerConfig object with tex_* fields
         """
-        if not self.url_tex or not self.tex_api_key:
+        if not self.config.tex_enabled or not self.url_tex or not self.tex_api_key:
             self._tex_status = None
             return
         
@@ -464,7 +464,7 @@ class TE(object):
         self.create_response_info(self.final_response)
         
         # Process TEX via separate TPAPI upload (independent of TE Cloud flow)
-        if self.url_tex and self.tex_api_key:
+        if self.url_tex and self.tex_api_key and self.config.tex_enabled:
             self._process_tex_results(self.config)
 
         if self.final_status_label == "FOUND":
