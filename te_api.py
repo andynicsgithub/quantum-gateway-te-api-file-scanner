@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v10.0 (alpha)
+te_api v11.0 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -27,10 +27,15 @@ Changes in v9.2 over v9.1:
   2. Zip created concurrently with file moves to verdict directories
   3. Configurable via config.ini, environment variables, and CLI args
 
+Changes in v11.0 over v10.0:
+   1. Added configurable email subject and body templates via string.Template
+   2. Added IMAP "Sent" folder saving for sent emails
+   3. Removed email_verbose config option (use ${file_list} placeholder in template instead)
+   4. Template file defaults to data/email_template.txt with sensible defaults
+
 Changes in v9.1 over v9.0:
-  1. Added email_verbose option for detailed file listing with verdicts in email
-  2. Email notifications now also sent in one-shot mode
-  3. process_files() returns verdict info for aggregation
+   1. Email notifications now also sent in one-shot mode
+   2. process_files() returns verdict info for aggregation
 
 Changes in v9.0 over v8.00:
   1. Added SMTP email notifications on batch completion in watch mode
@@ -116,7 +121,16 @@ def main():
     parser.add_argument('--email-password', help='SMTP authentication password')
     parser.add_argument('--email-from', help='Sender email address')
     parser.add_argument('--email-to', help='Recipient email address')
-    parser.add_argument('--email-verbose', action='store_true', help='Include detailed file list with verdicts in email notifications')
+    parser.add_argument('--email-subject-template', help='Email subject template (supports ${timestamp}, ${appliance_ip}, ${processed}, ${malicious})')
+    parser.add_argument('--email-template-file', help='Path to email body template file')
+    # IMAP "Sent" folder CLI args
+    parser.add_argument('--email-imap-enabled', action='store_true', help='Enable saving sent emails to IMAP "Sent" folder')
+    parser.add_argument('--email-imap-server', help='IMAP server hostname or IP')
+    parser.add_argument('--email-imap-port', type=int, help='IMAP server port (default: 993)')
+    parser.add_argument('--email-imap-use-ssl', action='store_true', help='Use SSL for IMAP connection')
+    parser.add_argument('--email-imap-username', help='IMAP authentication username')
+    parser.add_argument('--email-imap-password', help='IMAP authentication password')
+    parser.add_argument('--email-imap-folder', help='IMAP folder to save sent emails (default: Sent)')
     
     # Zip archive CLI args
     parser.add_argument('-za', '--zip_archive_directory', help='Directory to store password-protected zip archives of processed files')
@@ -144,7 +158,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v10.0 - Loading configuration...")
+    logger.info("TE API Scanner v11.0 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()

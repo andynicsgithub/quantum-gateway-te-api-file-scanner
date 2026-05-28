@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-config_manager.py v10.0 (alpha)
+config_manager.py v11.0 (alpha)
 Type-safe configuration management for TE API Scanner.
 Supports loading from config file, command-line arguments, and environment variables.
 """
@@ -46,7 +46,17 @@ class ScannerConfig:
     email_password: str = ''
     email_from: str = ''
     email_to: str = ''
-    email_verbose: bool = False
+    email_subject_template: str = ''
+    email_template_file: str = 'data/email_template.txt'
+    
+    # IMAP - save sent copies
+    email_imap_enabled: bool = False
+    email_imap_server: str = ''
+    email_imap_port: int = 993
+    email_imap_use_ssl: bool = True
+    email_imap_username: str = ''
+    email_imap_password: str = ''
+    email_imap_folder: str = 'Sent'
     
     # Zip archive configuration
     zip_archive_directory: Path = field(default_factory=lambda: Path('test_zip_archives'))
@@ -170,7 +180,15 @@ class ScannerConfig:
             'email_password': '',
             'email_from': '',
             'email_to': '',
-            'email_verbose': False,
+            'email_subject_template': '',
+            'email_template_file': 'data/email_template.txt',
+            'email_imap_enabled': False,
+            'email_imap_server': '',
+            'email_imap_port': 993,
+            'email_imap_use_ssl': True,
+            'email_imap_username': '',
+            'email_imap_password': '',
+            'email_imap_folder': 'Sent',
             'zip_archive_directory': 'test_zip_archives',
             'zip_password': '',
             'tex_enabled': False,
@@ -194,7 +212,7 @@ class ScannerConfig:
                         config_data[key] = int(value)
                     except ValueError:
                         print(f"Warning: Invalid integer value for {env_key}: {value}")
-                elif key in ['watch_mode', 'email_enabled', 'email_use_tls']:
+                elif key in ['watch_mode', 'email_enabled', 'email_use_tls', 'email_imap_enabled', 'email_imap_use_ssl']:
                     config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                 else:
                     config_data[key] = value
@@ -298,12 +316,12 @@ class ScannerConfig:
                     if key in section:
                         value = section[key]
                         # Convert types appropriately
-                        if key in ['email_smtp_port']:
+                        if key in ['email_smtp_port', 'email_imap_port']:
                             try:
                                 config_data[key] = int(value)
                             except ValueError:
                                 print(f"Warning: Invalid integer value in config for {key}: {value}")
-                        elif key in ['email_enabled', 'email_use_tls', 'email_verbose']:
+                        elif key in ['email_enabled', 'email_use_tls', 'email_imap_enabled', 'email_imap_use_ssl']:
                             config_data[key] = value.lower() in ['true', '1', 'yes', 'on']
                         else:
                             config_data[key] = value
@@ -351,8 +369,24 @@ class ScannerConfig:
                 config_data['email_from'] = cli_args.email_from
             if hasattr(cli_args, 'email_to') and cli_args.email_to:
                 config_data['email_to'] = cli_args.email_to
-            if hasattr(cli_args, 'email_verbose') and cli_args.email_verbose:
-                config_data['email_verbose'] = cli_args.email_verbose
+            if hasattr(cli_args, 'email_subject_template') and cli_args.email_subject_template:
+                config_data['email_subject_template'] = cli_args.email_subject_template
+            if hasattr(cli_args, 'email_template_file') and cli_args.email_template_file:
+                config_data['email_template_file'] = cli_args.email_template_file
+            if hasattr(cli_args, 'email_imap_enabled') and cli_args.email_imap_enabled:
+                config_data['email_imap_enabled'] = cli_args.email_imap_enabled
+            if hasattr(cli_args, 'email_imap_server') and cli_args.email_imap_server:
+                config_data['email_imap_server'] = cli_args.email_imap_server
+            if hasattr(cli_args, 'email_imap_port') and cli_args.email_imap_port:
+                config_data['email_imap_port'] = cli_args.email_imap_port
+            if hasattr(cli_args, 'email_imap_use_ssl') and cli_args.email_imap_use_ssl:
+                config_data['email_imap_use_ssl'] = cli_args.email_imap_use_ssl
+            if hasattr(cli_args, 'email_imap_username') and cli_args.email_imap_username:
+                config_data['email_imap_username'] = cli_args.email_imap_username
+            if hasattr(cli_args, 'email_imap_password') and cli_args.email_imap_password:
+                config_data['email_imap_password'] = cli_args.email_imap_password
+            if hasattr(cli_args, 'email_imap_folder') and cli_args.email_imap_folder:
+                config_data['email_imap_folder'] = cli_args.email_imap_folder
             
             # Zip archive CLI args
             if hasattr(cli_args, 'zip_archive_directory') and cli_args.zip_archive_directory:
@@ -379,7 +413,7 @@ class ScannerConfig:
             config_data[key] = PathHandler.normalize_path(config_data[key])
         
         # Ensure all integer fields are actually integers (configparser returns strings)
-        int_fields = ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count', 'email_smtp_port']
+        int_fields = ['concurrency', 'seconds_to_wait', 'max_retries', 'max_log_size_mb', 'backup_count', 'email_smtp_port', 'email_imap_port']
         for key in int_fields:
             if key in config_data and not isinstance(config_data[key], int):
                 try:
@@ -388,7 +422,7 @@ class ScannerConfig:
                     print(f"Warning: Could not convert {key} to integer, using default")
                     # Reset to default value based on field
                     defaults = {'concurrency': 4, 'seconds_to_wait': 15, 'max_retries': 120, 
-                                'max_log_size_mb': 10, 'backup_count': 5, 'email_smtp_port': 587}
+                                'max_log_size_mb': 10, 'backup_count': 5, 'email_smtp_port': 587, 'email_imap_port': 993}
                     config_data[key] = defaults.get(key, 0)
         
         # Ensure watch_mode is boolean
@@ -400,8 +434,10 @@ class ScannerConfig:
             config_data['email_enabled'] = str(config_data['email_enabled']).lower() in ['true', '1', 'yes', 'on']
         if 'email_use_tls' in config_data and not isinstance(config_data['email_use_tls'], bool):
             config_data['email_use_tls'] = str(config_data['email_use_tls']).lower() in ['true', '1', 'yes', 'on']
-        if 'email_verbose' in config_data and not isinstance(config_data['email_verbose'], bool):
-            config_data['email_verbose'] = str(config_data['email_verbose']).lower() in ['true', '1', 'yes', 'on']
+        if 'email_imap_enabled' in config_data and not isinstance(config_data['email_imap_enabled'], bool):
+            config_data['email_imap_enabled'] = str(config_data['email_imap_enabled']).lower() in ['true', '1', 'yes', 'on']
+        if 'email_imap_use_ssl' in config_data and not isinstance(config_data['email_imap_use_ssl'], bool):
+            config_data['email_imap_use_ssl'] = str(config_data['email_imap_use_ssl']).lower() in ['true', '1', 'yes', 'on']
         
         # Create and return ScannerConfig instance
         return cls(**config_data)
@@ -441,7 +477,13 @@ class ScannerConfig:
                 print(f"  Username:              {self.email_username}")
             else:
                 print(f"  Username:              (none - will attempt anonymous connect)")
-            print(f"  Verbose:               {'Yes' if self.email_verbose else 'No'}")
+            print(f"  Subject template:      {'Custom' if self.email_subject_template else 'Default'}")
+            print(f"  Body template:         {self.email_template_file}")
+        if self.email_imap_enabled:
+            print(f"  IMAP enabled:          Yes")
+            print(f"  IMAP server:           {self.email_imap_server}:{self.email_imap_port}")
+            print(f"  IMAP SSL:              {'Yes' if self.email_imap_use_ssl else 'No'}")
+            print(f"  IMAP folder:           {self.email_imap_folder}")
         
         # Zip Archive Configuration
         print("Zip Archive:")

@@ -1,6 +1,6 @@
 # te_api
 
-**Version 10.0** - Cross-platform Python client for Check Point Threat Emulation API
+**Version 11.0** - Cross-platform Python client for Check Point Threat Emulation API
 
 A Python client side utility for using Threat Emulation API calls to an on-premises Check Point gateway (or Threat Emulation appliance). **Now with full Windows and Linux support, including SMB/UNC network paths and continuous directory monitoring.**
 
@@ -142,13 +142,15 @@ sudo journalctl -u te-watcher -f
 
 ### Email Notifications
 
-The scanner can send batch completion email notifications via SMTP. Notifications are sent after each batch finishes processing in watch mode, and after all files are processed in one-shot mode.
+The scanner can send batch completion email notifications via SMTP. Notifications are sent after each batch finishes processing in watch mode, and after all files are processed in one-shot mode. Sent emails can optionally be saved to an IMAP "Sent" folder.
 
 **Configuration in config.ini:**
 
 ```ini
 [EMAIL]
 email_enabled = true
+
+# SMTP settings
 email_smtp_server = smtp.example.com
 email_smtp_port = 587
 email_use_tls = true
@@ -156,7 +158,23 @@ email_username = user@example.com
 email_password = your_password
 email_from = scanner@example.com
 email_to = admin@example.com
-email_verbose = false
+
+# Subject template (supports ${timestamp}, ${appliance_ip}, ${processed}, ${malicious})
+email_subject_template = TE Scanner: ${processed} files processed - ${malicious} malicious
+
+# Body template file path (string.Template format)
+# Available placeholders: ${timestamp}, ${appliance_ip}, ${processed}, ${benign},
+#   ${malicious}, ${error}, ${file_list}, ${malicious_files}, ${smtp_server}
+email_template_file = data/email_template.txt
+
+# IMAP "Sent" folder settings (separate from SMTP credentials)
+email_imap_enabled = false
+email_imap_server = imap.example.com
+email_imap_port = 993
+email_imap_use_ssl = true
+email_imap_username = user@example.com
+email_imap_password = your_password
+email_imap_folder = Sent
 ```
 
 **Configuration Options:**
@@ -171,16 +189,50 @@ email_verbose = false
 | `email_password` | SMTP authentication password | - |
 | `email_from` | Sender email address | - |
 | `email_to` | Recipient email address | - |
-| `email_verbose` | Include detailed file list with verdicts | false |
+| `email_subject_template` | Email subject template | `TE Scanner: ${processed} files processed - ${malicious} malicious` |
+| `email_template_file` | Path to email body template file | `data/email_template.txt` |
+| `email_imap_enabled` | Enable saving sent emails to IMAP folder | false |
+| `email_imap_server` | IMAP server hostname or IP | - |
+| `email_imap_port` | IMAP server port | 993 |
+| `email_imap_use_ssl` | Use SSL for IMAP connection | true |
+| `email_imap_username` | IMAP authentication username | - |
+| `email_imap_password` | IMAP authentication password | - |
+| `email_imap_folder` | IMAP folder to save sent emails | `Sent` |
 
-**Verbose Mode:** When `email_verbose = true`, the email includes a flat list of all processed files with their relative paths and verdicts:
+**Custom Email Templates:**
+
+Email body templates use Python's `string.Template` syntax. Available placeholders:
+
+| Placeholder | Description |
+|-------------|-------------|
+| `${timestamp}` | UTC timestamp of the report |
+| `${appliance_ip}` | Appliance IP address |
+| `${processed}` | Total files processed |
+| `${benign}` | Benign file count |
+| `${malicious}` | Malicious file count |
+| `${error}` | Error count |
+| `${file_list}` | Detailed list of all processed files (empty if not available) |
+| `${malicious_files}` | List of malicious files (empty if none) |
+| `${smtp_server}` | SMTP server address |
+
+Include `${file_list}` in your template to show the detailed file listing. Omit it for a summary-only email.
+
+**Example Template (data/email_template.txt):**
 
 ```
-File Details:
-  malware.exe - Malicious
-  docs/report.pdf - Benign
-  subdir/archive.zip - Malicious
-  subdir/data.csv - Benign
+TE API Scanner - Batch Report
+
+Timestamp: ${timestamp}
+Appliance: ${appliance_ip}
+
+Summary:
+  Files processed:   ${processed}
+  Benign:            ${benign}
+  Malicious:         ${malicious}
+  Errors:            ${error}
+
+${file_list}${malicious_files}---
+Server: ${smtp_server}
 ```
 
 **Command-Line Options:**
@@ -195,15 +247,23 @@ File Details:
 | `--email-password PASS` | SMTP authentication password |
 | `--email-from ADDR` | Sender email address |
 | `--email-to ADDR` | Recipient email address |
-| `--email-verbose` | Include detailed file list with verdicts |
+| `--email-subject-template TXT` | Email subject template |
+| `--email-template-file PATH` | Path to email body template file |
+| `--email-imap-enabled` | Enable IMAP "Sent" folder saving |
+| `--email-imap-server HOST` | IMAP server hostname or IP |
+| `--email-imap-port PORT` | IMAP server port |
+| `--email-imap-use-ssl` | Use SSL for IMAP connection |
+| `--email-imap-username USER` | IMAP authentication username |
+| `--email-imap-password PASS` | IMAP authentication password |
+| `--email-imap-folder FOLDER` | IMAP folder name |
 
 **Example:**
 
 ```bash
-python te_api.py --watch --email-enabled --email-smtp-server 10.1.48.103 --email-to admin@example.com --email-from scanner@example.com --email-verbose
+python te_api.py --watch --email-enabled --email-smtp-server 10.1.48.103 --email-to admin@example.com --email-from scanner@example.com
 ```
 
-**Note:** Email notifications require the `[EMAIL]` section to be properly configured in `config.ini` with the correct key names (`email_enabled`, `email_smtp_server`, etc.). Keys without the `email_` prefix will not be recognized.
+**Note:** Email notifications require the `[EMAIL]` section to be properly configured in `config.ini` with the correct key names. Template files fall back to the legacy default body format if the specified template file is not found. IMAP credentials are separate from SMTP credentials.
 
 ### TEX (Threat Extraction / Scrub)
 
