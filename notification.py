@@ -302,7 +302,7 @@ def _save_to_imap(config, msg, body, subject):
         raw_msg = '\r\n'.join(raw_lines)
         
         # Append to the IMAP folder
-        imap_conn.append(imap_folder, '', imaplib.Time2Internaldate(), raw_msg.encode('utf-8'))
+        imap_conn.append(imap_folder, '', None, raw_msg.encode('utf-8'))
         
         imap_conn.expunge(imap_folder)
         imap_conn.logout()
