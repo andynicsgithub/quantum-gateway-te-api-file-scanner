@@ -304,7 +304,6 @@ def _save_to_imap(config, msg, body, subject):
         # Append to the IMAP folder
         imap_conn.append(imap_folder, '', None, raw_msg.encode('utf-8'))
         
-        imap_conn.expunge(imap_folder)
         imap_conn.logout()
         
         logger.info(f"Email saved to IMAP folder '{imap_folder}' on {imap_server}")
