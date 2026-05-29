@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-zip_archive.py v10.0 (alpha)
+zip_archive.py v11.1 (alpha)
 Manages creation of password-protected zip archives for batch file processing.
 Files are added to the zip before they are moved to verdict directories.
 
@@ -101,7 +101,8 @@ class ZipArchiveManager:
             self.logger.debug(f"Added to zip: {internal_path}")
             
         except Exception as e:
-            self.logger.error(f"Failed to add file to zip archive ({file_name}): {e}")
+            display_path = f"{sub_dir}/{file_name}" if sub_dir else file_name
+        self.logger.error(f"Failed to add file to zip archive ({display_path}): {e}")
     
     def consolidate(self, temp_dir, verdict_basenames, password):
         """

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-tex_results.py v10.0 (alpha)
+tex_results.py v11.1 (alpha)
 Handles TEX (Threat Extraction / Scrub) results from file upload responses.
 Extracts scrub results, writes response info, and creates cleaned files when TEX
 manages to scrub the file.
@@ -59,12 +59,13 @@ class TEX(object):
        tex_clean_files/ with a .cleaned filename pattern
     
     Usage:
-        tex = TEX(file_name, tex_response_info_dir, tex_clean_files_dir)
+        tex = TEX(file_name, tex_response_info_dir, tex_clean_files_dir, log_path=None)
         tex.process_results(upload_response)
     """
     
-    def __init__(self, file_name, output_folder_tex_response_info, output_folder_tex_clean_files):
+    def __init__(self, file_name, output_folder_tex_response_info, output_folder_tex_clean_files, log_path=None):
         self.file_name = file_name
+        self.log_path = log_path if log_path else file_name
         self.output_folder_tex_response_info = Path(output_folder_tex_response_info)
         self.output_folder_tex_clean_files = Path(output_folder_tex_clean_files)
         self.clean_file_data = ""
@@ -152,7 +153,7 @@ class TEX(object):
                 self.logger.info(f"TEX extract result: {return_relevant_enum(self.scrub_result)}")
             return is_cleaned
         except Exception as E:
-            self.logger.error(f"Processing TEX results failed for {self.file_name}: {E}", exc_info=True)
+            self.logger.error(f"Processing TEX results failed for {self.log_path}: {E}", exc_info=True)
             raise
     
     def _create_response_info(self, response):
@@ -168,7 +169,7 @@ class TEX(object):
         try:
             scrub_response = response["response"][0]["scrub"]
         except (KeyError, IndexError) as E:
-            self.logger.error(f"No scrub data in response for {self.file_name}: {E}")
+            self.logger.error(f"No scrub data in response for {self.log_path}: {E}")
             return False
         
         # Check if file was cleaned (empty file_enc_data means not cleaned)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v10.0 (alpha)
+te_file_handler v11.1 (alpha)
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
@@ -12,11 +12,14 @@ Features:
   - Pretty-prints JSON response output
   - Processes TEX (Scrub) results from upload response
 
+Changes in v11.1 over v10.0:
+    1. Added log_path property to all log messages to distinguish files with same name in different subdirectories
+
 Changes in v10.0 over v9.2:
-  1. Added TEX (Threat Extraction/Scrub) result processing after upload
-  2. TE class accepts url_tex and tex_api_key parameters
-  3. TEX results written to tex_response_info/ and cleaned files to tex_clean_files/
-  4. TEX errors are non-blocking — TE processing continues on TEX failure
+    1. Added TEX (Threat Extraction/Scrub) result processing after upload
+    2. TE class accepts url_tex and tex_api_key parameters
+    3. TEX results written to tex_response_info/ and cleaned files to tex_clean_files/
+    4. TEX errors are non-blocking — TE processing continues on TEX failure
 
 Changes in v9.0 over v8.00:
   1. Added SMTP email notification integration support
@@ -117,6 +120,17 @@ class TE(object):
 
 
 
+    @property
+    def log_path(self):
+        """
+        Return file path for logging purposes.
+        Returns 'sub_dir/file_name' if sub_dir is non-empty and not '.',
+        otherwise just 'file_name'.
+        """
+        if self.sub_dir and self.sub_dir != '.':
+            return f"{self.sub_dir}/{self.file_name}"
+        return self.file_name
+
     def set_file_sha1(self):
         """
         Calculates the file's sha1
@@ -138,7 +152,7 @@ class TE(object):
         :return the verdict
         """
         verdict = response["response"][0][feature]["combined_verdict"]
-        self.logger.info("{} - {} verdict is: {}".format(self.file_name, feature, verdict))
+        self.logger.info("{} - {} verdict is: {}".format(self.log_path, feature, verdict))
         return verdict
 
     def parse_report_id(self, response):
@@ -161,7 +175,7 @@ class TE(object):
         output_file = output_path / (self.file_name + ".response.txt")
         self.logger.debug(f"self.reports_directory: {self.reports_directory}")
         self.logger.debug(f"self.sub_dir: {self.sub_dir}")
-        self.logger.debug(f"self.file_name: {self.file_name}")
+        self.logger.debug(f"self.log_path: {self.log_path}")
         self.logger.debug(f"{output_file}")
         with open(str(output_file), 'w') as file:
             file.write(json.dumps(response, indent=4))
@@ -175,7 +189,7 @@ class TE(object):
         request = copy.deepcopy(self.request_template)
         request['request'][0]['features'].remove('te_eb')
         request['request'][0]['sha1'] = self.sha1
-        self.logger.info(f"{self.file_name} - sha1: {self.sha1}")
+        self.logger.info(f"{self.log_path} - sha1: {self.sha1}")
         data = json.dumps(request)
         self.logger.debug("Sending TE Query request before upload in order to check TE cache")
         response = requests.post(url=self.url + "query", data=data, verify=False)
@@ -319,7 +333,7 @@ class TE(object):
         # Check if file type is enabled for TEX processing
         file_ext = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
         if config.tex_supported_file_types and file_ext not in config.tex_supported_file_types:
-            self.logger.info(f"Skipping TEX — file type not enabled: {self.file_name} ({file_ext})")
+            self.logger.info(f"Skipping TEX — file type not enabled: {self.log_path} ({file_ext})")
             return None
         
         try:
@@ -357,17 +371,17 @@ class TE(object):
             }
             
             # Encode file as base64
-            self.logger.info(f"Reading file {self.file_name} for TEX upload ({self.full_path.stat().st_size:,} bytes)")
+            self.logger.info(f"Reading file {self.log_path} for TEX upload ({self.full_path.stat().st_size:,} bytes)")
             with open(str(self.full_path), 'rb') as f:
                 file_b64 = base64.b64encode(f.read()).decode("utf-8")
-            self.logger.info(f"Base64 encoding complete for {self.file_name} ({len(file_b64):,} bytes)")
+            self.logger.info(f"Base64 encoding complete for {self.log_path} ({len(file_b64):,} bytes)")
             request['request'][0]['file_enc_data'] = str(file_b64)
             
             data = json.dumps(request, ensure_ascii=False)
-            self.logger.info(f"JSON serialization complete for {self.file_name} ({len(data):,} bytes total)")
+            self.logger.info(f"JSON serialization complete for {self.log_path} ({len(data):,} bytes total)")
             
             try:
-                self.logger.info(f"Sending TEX upload request for {self.file_name} to {self.url_tex}")
+                self.logger.info(f"Sending TEX upload request for {self.log_path} to {self.url_tex}")
                 response = requests.post(
                     url=self.url_tex,
                     data=data,
@@ -375,16 +389,16 @@ class TE(object):
                     verify=False,
                     timeout=300
                 )
-                self.logger.info(f"TEX upload response received for {self.file_name} (status {response.status_code})")
+                self.logger.info(f"TEX upload response received for {self.log_path} (status {response.status_code})")
             except Exception as E:
-                self.logger.error(f"TEX upload request failed for {self.file_name}: {E}", exc_info=True)
+                self.logger.error(f"TEX upload request failed for {self.log_path}: {E}", exc_info=True)
                 return None
             
             response_j = response.json()
             return response_j
             
         except Exception as E:
-            self.logger.error(f"TEX upload preparation failed for {self.file_name}: {E}", exc_info=True)
+            self.logger.error(f"TEX upload preparation failed for {self.log_path}: {E}", exc_info=True)
             return None
     
     def _process_tex_results(self, config):
@@ -408,33 +422,34 @@ class TE(object):
         file_ext = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
         if config.tex_supported_file_types and file_ext not in config.tex_supported_file_types:
             self._tex_status = 'unsupported'
-            self.logger.info(f"Skipping TEX — file type not enabled: {self.file_name} ({file_ext})")
+            self.logger.info(f"Skipping TEX — file type not enabled: {self.log_path} ({file_ext})")
             return
         
         try:
             upload_response = self._upload_for_tex(config)
             if upload_response is None:
-                self.logger.warning(f"TEX upload returned no response for {self.file_name}")
+                self.logger.warning(f"TEX upload returned no response for {self.log_path}")
                 return
             
             scrub_info = upload_response.get('response', [{}])[0].get('scrub', {})
             self.logger.debug(f"TEX upload response status: {scrub_info.get('scrub_result', 'unknown')}")
             
             tex = TEX(
-                self.file_name,
-                self.tex_response_info_dir,
-                self.tex_clean_files_dir
-            )
+                 self.file_name,
+                 self.tex_response_info_dir,
+                 self.tex_clean_files_dir,
+                 self.log_path
+             )
             is_cleaned = tex.process_results(upload_response)
             if is_cleaned:
                 self._tex_status = 'cleaned'
                 self.logger.info(f"TEX cleaned file: {tex.clean_file_name}")
             else:
                 self._tex_status = 'not_cleaned'
-                self.logger.info(f"TEX processed but found nothing to remove: {self.file_name}")
+                self.logger.info(f"TEX processed but found nothing to remove: {self.log_path}")
             
         except Exception as E:
-            self.logger.warning(f"TEX processing failed for {self.file_name}: {E}")
+            self.logger.warning(f"TEX processing failed for {self.log_path}: {E}")
             # TEX errors are non-blocking - continue with TE processing
 
 
@@ -508,39 +523,39 @@ class TE(object):
         Args:
             verdict_basename: Directory name inside zip (e.g. 'benign', 'quarantine', 'error').
         """
-        self.logger.info(f"[ZIP] _add_to_zip called for {self.file_name}, zip_config type={type(self.zip_config).__name__}, basename={verdict_basename}")
+        self.logger.info(f"[ZIP] _add_to_zip called for {self.log_path}, zip_config type={type(self.zip_config).__name__}, basename={verdict_basename}")
         
         if self.zip_config is None:
-            self.logger.warning(f"[ZIP] zip_config is None, skipping {self.file_name}")
+            self.logger.warning(f"[ZIP] zip_config is None, skipping {self.log_path}")
             return
         
         if not verdict_basename:
-            self.logger.warning(f"[ZIP] verdict_basename is empty, skipping {self.file_name}")
+            self.logger.warning(f"[ZIP] verdict_basename is empty, skipping {self.log_path}")
             return
         
         # Single-process mode (watch mode): ZipArchiveManager instance
         if isinstance(self.zip_config, ZipArchiveManager):
-            self.logger.info(f"[ZIP] Single-process mode: adding {self.file_name} directly to zip")
+            self.logger.info(f"[ZIP] Single-process mode: adding {self.log_path} directly to zip")
             self.zip_config.add_file(self.full_path, verdict_basename, self.sub_dir, self.file_name)
             return
         
         # Multiprocessing mode: copy to temp directory for consolidation
         if not isinstance(self.zip_config, (list, tuple)):
-            self.logger.warning(f"[ZIP] zip_config is not a ZipArchiveManager or tuple: {type(self.zip_config)}, skipping {self.file_name}")
+            self.logger.warning(f"[ZIP] zip_config is not a ZipArchiveManager or tuple: {type(self.zip_config)}, skipping {self.log_path}")
             return
         
         # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, 
         #              error_basename, temp_dir)
         if len(self.zip_config) < 6:
-            self.logger.warning(f"[ZIP] zip_config has only {len(self.zip_config)} elements, expected 6, skipping {self.file_name}")
+            self.logger.warning(f"[ZIP] zip_config has only {len(self.zip_config)} elements, expected 6, skipping {self.log_path}")
             return
         
         temp_dir = self.zip_config[5]
         if not temp_dir:
-            self.logger.warning(f"[ZIP] temp_dir is empty, skipping {self.file_name}")
+            self.logger.warning(f"[ZIP] temp_dir is empty, skipping {self.log_path}")
             return
         
-        self.logger.info(f"[ZIP] Multiprocessing mode: copying {self.file_name} to temp dir: {temp_dir}")
+        self.logger.info(f"[ZIP] Multiprocessing mode: copying {self.log_path} to temp dir: {temp_dir}")
         
         try:
             dest_path = Path(temp_dir) / verdict_basename / self.sub_dir
@@ -552,9 +567,9 @@ class TE(object):
                     if not chunk:
                         break
                     dst_f.write(chunk)
-            self.logger.info(f"Copied {self.file_name} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.file_name}")
+            self.logger.info(f"Copied {self.log_path} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.log_path}")
         except Exception as e:
-            self.logger.error(f"Failed to copy {self.file_name} to temp for zip: {e}", exc_info=True)
+            self.logger.error(f"Failed to copy {self.log_path} to temp for zip: {e}", exc_info=True)
     
     def move_file(self, destination_directory):
         """
@@ -571,5 +586,5 @@ class TE(object):
         if success:
             self.logger.debug(message)
         else:
-            self.logger.error(f"Failed to move file {self.file_name}. {message}")
+            self.logger.error(f"Failed to move file {self.log_path}. {message}")
 

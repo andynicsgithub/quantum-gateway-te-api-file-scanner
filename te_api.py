@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v11.0 (alpha)
+te_api v11.1 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -27,11 +27,15 @@ Changes in v9.2 over v9.1:
   2. Zip created concurrently with file moves to verdict directories
   3. Configurable via config.ini, environment variables, and CLI args
 
+Changes in v11.1 over v11.0:
+    1. Added log_path to all log messages to distinguish files with same name in different subdirectories
+    2. Updated "Handling file" log to show sub_dir/file_name format
+
 Changes in v11.0 over v10.0:
-   1. Added configurable email subject and body templates via string.Template
-   2. Added IMAP "Sent" folder saving for sent emails
-   3. Removed email_verbose config option (use ${file_list} placeholder in template instead)
-   4. Template file defaults to data/email_template.txt with sensible defaults
+    1. Added configurable email subject and body templates via string.Template
+    2. Added IMAP "Sent" folder saving for sent emails
+    3. Removed email_verbose config option (use ${file_list} placeholder in template instead)
+    4. Template file defaults to data/email_template.txt with sensible defaults
 
 Changes in v9.1 over v9.0:
    1. Email notifications now also sent in one-shot mode
@@ -158,7 +162,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v11.0 - Loading configuration...")
+    logger.info("TE API Scanner v11.1 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()
@@ -296,6 +300,17 @@ def main():
 # =======================
 # Utility Functions
 # =======================
+
+def _file_display_path(file_name, sub_dir):
+    """
+    Return a display-friendly path for logging purposes.
+    
+    Returns 'sub_dir/file_name' if sub_dir is non-empty and not '.',
+    otherwise just 'file_name'.
+    """
+    if sub_dir and sub_dir != '.':
+        return f"{sub_dir}/{file_name}"
+    return file_name
 
 def discover_files(input_directory):
     """
@@ -481,7 +496,7 @@ def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_co
     logger = logging.getLogger('te_scanner.main')
     result = {'name': file_name, 'path': sub_dir if sub_dir else '', 'verdict': 'Unknown', 'status': 'error'}
     try:
-        logger.info(f"Handling file: {file_name} (zip_config type={type(zip_config).__name__})")
+        logger.info(f"Handling file: {_file_display_path(file_name, sub_dir)} (zip_config type={type(zip_config).__name__})")
         te = TE(
             url, 
             url_tex,
@@ -509,7 +524,7 @@ def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_co
             result['verdict'] = te.final_status_label if te.final_status_label else 'Not_Found'
             result['status'] = 'success'
     except Exception as E:
-        logger.error(f"Could not handle file: {file_name} because: {E}. Continue to handle the next file.")
+        logger.error(f"Could not handle file: {_file_display_path(file_name, sub_dir)} because: {E}. Continue to handle the next file.")
         result['status'] = 'error'
     
     return result

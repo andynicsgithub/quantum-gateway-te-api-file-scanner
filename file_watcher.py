@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v10.0 (alpha)
+file_watcher.py v11.1 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)
@@ -367,7 +367,8 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                 if sub_dir == '.':
                     sub_dir = ''
                 
-                batch_logger.info(f"Processing: {file_name}")
+                display_path = f"{sub_dir}/{file_name}" if sub_dir else file_name
+                batch_logger.info(f"Processing: {display_path}")
                 
                 # Create TE instance and process
                 te = TE(
@@ -430,9 +431,11 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                 try:
                     error_path = config.error_directory / file_obj.name
                     PathHandler.safe_move(file_path, error_path)
-                    batch_logger.info(f"Moved {file_name} to error directory")
+                    display = f"{sub_dir}/{file_name}" if sub_dir else file_name
+                    batch_logger.info(f"Moved {display} to error directory")
                 except Exception as move_error:
-                    batch_logger.error(f"Failed to move {file_name} to error directory: {move_error}")
+                    display = f"{sub_dir}/{file_name}" if sub_dir else file_name
+                    batch_logger.error(f"Failed to move {display} to error directory: {move_error}")
                 # Continue to next file
                 continue
         
