@@ -191,7 +191,7 @@ class TE(object):
         request['request'][0]['sha1'] = self.sha1
         self.logger.info(f"{self.log_path} - sha1: {self.sha1}")
         data = json.dumps(request)
-        self.logger.debug("Sending TE Query request before upload in order to check TE cache")
+        self.logger.debug("{} - Sending TE Query request before upload in order to check TE cache".format(self.log_path))
         response = requests.post(url=self.url + "query", data=data, verify=False)
         response_j = response.json()
         return response_j
@@ -203,7 +203,7 @@ class TE(object):
         """
         request = copy.deepcopy(self.request_template)
         data = json.dumps(request)
-        self.logger.debug("Sending Upload request of te and te_eb")
+        self.logger.debug("{} - Sending Upload request of te and te_eb".format(self.log_path))
         try:
             with open(str(self.full_path), 'rb') as f:
                 curr_file = {
@@ -216,7 +216,7 @@ class TE(object):
             self.move_file(self.error_directory)            
             raise
         response_j = response.json()
-        self.logger.info("te and te_eb Upload response status : {}".format(response_j["response"][0]["status"]["label"]))
+        self.logger.info("{} - te and te_eb Upload response status : {}".format(self.log_path, response_j["response"][0]["status"]["label"]))
         return response_j
 
     def query_file(self):
@@ -225,7 +225,7 @@ class TE(object):
         Repeat query until receiving te results.  te_eb results of early malicious verdict might be received earlier.
         :return the (last) query response with the handled file TE results
         """
-        self.logger.debug("Start sending Query requests of te and te_eb after TE upload")
+        self.logger.debug("{} - Start sending Query requests of te and te_eb after TE upload".format(self.log_path))
         time.sleep(SECONDS_TO_WAIT)
         request = copy.deepcopy(self.request_template)
         request['request'][0]['sha1'] = self.sha1
@@ -235,7 +235,7 @@ class TE(object):
         te_eb_found = False
         retry_no = 0
         while (not status_label) or (status_label == "PENDING") or (status_label == "PARTIALLY_FOUND"):
-            self.logger.debug("Sending Query request of te and te_eb")
+            self.logger.debug("{} - Sending Query request of te and te_eb".format(self.log_path))
             response = requests.post(url=self.url + "query", data=data, verify=False)
             response_j = response.json()
             status_label = response_j['response'][0]['status']['label']
@@ -248,8 +248,8 @@ class TE(object):
                         te_eb_found = True
                         te_eb_verdict = self.parse_verdict(response_j, "te_eb")
                         if te_eb_verdict == "Malicious":
-                            self.logger.debug("Early verdict is malicious")
-                            self.logger.debug("Continue Query until receiving te results")
+                            self.logger.debug("{} - Early verdict is malicious".format(self.log_path))
+                            self.logger.debug("{} - Continue Query until receiving te results".format(self.log_path))
                 te_status_label = response_j["response"][0]["te"]['status']['label']
                 if (te_status_label == "FOUND") or (te_status_label == "NOT_FOUND"):
                     break
@@ -262,11 +262,11 @@ class TE(object):
                             break
                     if no_pending_image:
                         break
-            self.logger.debug("te and te_eb Query response status : {}".format(status_label))
+            self.logger.debug("{} - te and te_eb Query response status : {}".format(self.log_path, status_label))
             time.sleep(SECONDS_TO_WAIT)
             retry_no += 1
             if retry_no == MAX_RETRIES:
-                self.logger.debug("Reached query max retries.  Stop waiting for te results for")
+                self.logger.debug("{} - Reached query max retries. Stop waiting for te results".format(self.log_path))
                 break
         return response_j
 
@@ -275,7 +275,7 @@ class TE(object):
         Download the TE report to the appliance and save it as a .tgz file
         """
         try:
-            self.logger.debug("Sending Download request for TE report")
+            self.logger.debug("{} - Sending Download request for TE report".format(self.log_path))
             response = requests.get(url=self.url + "download?id=" + self.report_id, verify=False)
             encoded_content_string = response.text
             decoded_content = base64.b64decode(encoded_content_string)
@@ -290,7 +290,7 @@ class TE(object):
             
             self.logger.debug("TE report downloaded to: {}".format(decoded_report_archive_path))
         except Exception as E:
-            self.logger.error("Downloading TE report failed:  {} ".format(E))
+            self.logger.error("{} - Downloading TE report failed:  {} ".format(self.log_path, E))
 
 
     def _setup_tex_directories(self, config):
@@ -338,10 +338,10 @@ class TE(object):
         
         try:
             self._setup_tex_directories(config)
-            self.logger.info(f"Uploading to TPAPI for TEX processing: {self.url_tex}")
+            self.logger.info(f"{self.log_path} - Uploading to TPAPI for TEX processing: {self.url_tex}")
             
             md5 = self._set_file_md5()
-            self.logger.debug(f"File MD5: {md5}")
+            self.logger.debug(f"{self.log_path} - File MD5: {md5}")
             
             # Use configured scrubbed parts codes
             scrubbed_parts = sorted(config.tex_scrubbed_parts_codes) if config.tex_scrubbed_parts_codes else [1018, 1019, 1021, 1025, 1026, 1034, 1137, 1139, 1141, 1142, 1143, 1150, 1151]
@@ -432,7 +432,7 @@ class TE(object):
                 return
             
             scrub_info = upload_response.get('response', [{}])[0].get('scrub', {})
-            self.logger.debug(f"TEX upload response status: {scrub_info.get('scrub_result', 'unknown')}")
+            self.logger.debug(f"{self.log_path} - TEX upload response status: {scrub_info.get('scrub_result', 'unknown')}")
             
             tex = TEX(
                  self.file_name,
@@ -443,7 +443,7 @@ class TE(object):
             is_cleaned = tex.process_results(upload_response)
             if is_cleaned:
                 self._tex_status = 'cleaned'
-                self.logger.info(f"TEX cleaned file: {tex.clean_file_name}")
+                self.logger.info(f"{self.log_path} - TEX cleaned file: {tex.clean_file_name}")
             else:
                 self._tex_status = 'not_cleaned'
                 self.logger.info(f"TEX processed but found nothing to remove: {self.log_path}")
@@ -460,17 +460,17 @@ class TE(object):
         query_cache_response = self.check_te_cache()
         cache_status_label = query_cache_response['response'][0]['status']['label']
         if cache_status_label == "FOUND":
-            self.logger.debug("Results already exist in TE cache")
+            self.logger.debug("{} - Results already exist in TE cache".format(self.log_path))
             self.final_response = query_cache_response
             self.final_status_label = cache_status_label
         else:
-            self.logger.debug("No results in TE cache before upload")
+            self.logger.debug("{} - No results in TE cache before upload".format(self.log_path))
             upload_response = self.upload_file()
             upload_status_label = upload_response["response"][0]["status"]["label"]
             if upload_status_label == "UPLOAD_SUCCESS":
                 query_response = self.query_file()
                 query_status_label = query_response["response"][0]["status"]["label"]
-                self.logger.debug("Receiving Query response with te results. status: {}".format(query_status_label))
+                self.logger.debug("{} - Receiving Query response with te results. status: {}".format(self.log_path, query_status_label))
                 self.final_response = query_response
                 self.final_status_label = query_status_label
             else:
@@ -483,17 +483,17 @@ class TE(object):
             self._process_tex_results(self.config)
 
         if self.final_status_label == "FOUND":
-            self.logger.debug("move_file called")
+            self.logger.debug("{} - move_file called".format(self.log_path))
             verdict = self.parse_verdict(self.final_response, "te")
             # Get last path component robustly - works for UNC, local, trailing slashes
             def get_dir_basename(path_obj):
                 p = str(path_obj).rstrip('/\\')
                 idx = max(p.rfind('/'), p.rfind('\\'))
                 return p[idx+1:] if idx >= 0 else p
-            self.logger.info(f"[ZIP] verdict={verdict}, dirs: benign={self.benign_directory!r} quarantine={self.quarantine_directory!r} error={self.error_directory!r}")
+            self.logger.info(f"{self.log_path} - [ZIP] verdict={verdict}, dirs: benign={self.benign_directory!r} quarantine={self.quarantine_directory!r} error={self.error_directory!r}")
             if verdict == "Malicious":
                 basename = get_dir_basename(self.quarantine_directory)
-                self.logger.info(f"[ZIP] Malicious: basename={basename!r}")
+                self.logger.info(f"{self.log_path} - [ZIP] Malicious: basename={basename!r}")
                 self._add_to_zip(basename)
                 self.move_file(self.quarantine_directory)
                 self.parse_report_id(self.final_response)
@@ -501,12 +501,12 @@ class TE(object):
                     self.download_report()
             elif verdict == "Benign":
                 basename = get_dir_basename(self.benign_directory)
-                self.logger.info(f"[ZIP] Benign: basename={basename!r}")
+                self.logger.info(f"{self.log_path} - [ZIP] Benign: basename={basename!r}")
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
             elif verdict == "Error":
                 basename = get_dir_basename(self.error_directory)
-                self.logger.info(f"[ZIP] Error: basename={basename!r}")
+                self.logger.info(f"{self.log_path} - [ZIP] Error: basename={basename!r}")
                 self._add_to_zip(basename)
                 self.move_file(self.error_directory)
                 
@@ -567,7 +567,7 @@ class TE(object):
                     if not chunk:
                         break
                     dst_f.write(chunk)
-            self.logger.info(f"Copied {self.log_path} to temp for zip: {verdict_basename}/{sub_dir}/{self.file_name}")
+            self.logger.info(f"Copied {self.log_path} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.file_name}")
         except Exception as e:
             self.logger.error(f"Failed to copy {self.log_path} to temp for zip: {e}", exc_info=True)
     
@@ -584,7 +584,7 @@ class TE(object):
         success, message = PathHandler.safe_move(current_location, destination_location)
         
         if success:
-            self.logger.debug(message)
+            self.logger.debug("{} - {}".format(self.log_path, message))
         else:
             self.logger.error(f"Failed to move file {self.log_path}. {message}")
 
