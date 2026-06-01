@@ -173,10 +173,6 @@ class TE(object):
         output_path = self.reports_directory / self.sub_dir
         output_path.mkdir(parents=True, exist_ok=True)
         output_file = output_path / (self.file_name + ".response.txt")
-        self.logger.debug(f"self.reports_directory: {self.reports_directory}")
-        self.logger.debug(f"self.sub_dir: {self.sub_dir}")
-        self.logger.debug(f"self.log_path: {self.log_path}")
-        self.logger.debug(f"{output_file}")
         with open(str(output_file), 'w') as file:
             file.write(json.dumps(response, indent=4))
             
