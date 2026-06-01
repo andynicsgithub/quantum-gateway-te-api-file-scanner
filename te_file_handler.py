@@ -567,7 +567,7 @@ class TE(object):
                     if not chunk:
                         break
                     dst_f.write(chunk)
-            self.logger.info(f"Copied {self.log_path} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.log_path}")
+            self.logger.info(f"Copied {self.log_path} to temp for zip: {verdict_basename}/{sub_dir}/{self.file_name}")
         except Exception as e:
             self.logger.error(f"Failed to copy {self.log_path} to temp for zip: {e}", exc_info=True)
     

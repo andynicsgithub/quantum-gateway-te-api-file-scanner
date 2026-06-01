@@ -85,6 +85,8 @@ class ZipArchiveManager:
         if self._zip_file is None:
             return
         
+        display_path = f"{sub_dir}/{file_name}" if sub_dir else file_name
+        
         try:
             src = Path(source_path)
             if not src.exists():
@@ -101,8 +103,7 @@ class ZipArchiveManager:
             self.logger.debug(f"Added to zip: {internal_path}")
             
         except Exception as e:
-            display_path = f"{sub_dir}/{file_name}" if sub_dir else file_name
-        self.logger.error(f"Failed to add file to zip archive ({display_path}): {e}")
+            self.logger.error(f"Failed to add file to zip archive ({display_path}): {e}")
     
     def consolidate(self, temp_dir, verdict_basenames, password):
         """

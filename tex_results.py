@@ -112,15 +112,7 @@ class TEX(object):
             else:
                 self._fallback_filename()
         else:
-            if self._new_extension:
-                match = re.match(r'^(.+?)(\.[^.]+)?$', self.file_name)
-                if match:
-                    base = match.group(1)
-                    self.clean_file_name = f"{base}.cleaned{self._new_extension}"
-                else:
-                    self.clean_file_name = f"{self.file_name}.cleaned"
-            else:
-                self._fallback_filename()
+            self._fallback_filename()
         
         output_path = self.output_folder_tex_clean_files / self.clean_file_name
         output_path.parent.mkdir(parents=True, exist_ok=True)

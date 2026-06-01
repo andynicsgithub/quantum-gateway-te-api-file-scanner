@@ -275,7 +275,7 @@ class ScannerConfig:
                         else:
                             config_data[key] = value
             
-           # Read from TEX section
+            # Read from TEX section
             if 'TEX' in parser:
                 section = parser['TEX']
                 
@@ -394,7 +394,7 @@ class ScannerConfig:
             if hasattr(cli_args, 'zip_password') and cli_args.zip_password is not None:
                 config_data['zip_password'] = cli_args.zip_password
             
-           # TEX CLI args
+            # TEX CLI args
             if hasattr(cli_args, 'tex_enabled') and cli_args.tex_enabled:
                 config_data['tex_enabled'] = cli_args.tex_enabled
             if hasattr(cli_args, 'tex_url') and cli_args.tex_url:
