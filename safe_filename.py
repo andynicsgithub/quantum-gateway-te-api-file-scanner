@@ -2,43 +2,48 @@
 
 """
 safe_filename.py
-Utilities for handling filenames that may contain non-UTF-8 characters.
+Utilities for generating ASCII-only pseudonyms from filenames.
 
-The TE API server only accepts UTF-8 filenames. This module provides
-a sanitize_filename() function that:
+The TE API server only accepts filenames composed of ASCII characters.
+This module provides a sanitize_filename() function that:
 
-1. Replaces non-UTF-8 bytes with '_'
+1. Converts the filename to ASCII by replacing any non-ASCII character
+   with an underscore ('_')
 2. Preserves the original file extension
-3. If the cleaned name is empty, uses a full SHA256 hash of the original
-   filename as the base
-4. If the cleaned name collides with a previously seen name, appends the
-   full SHA256 hash (prepended by '_') to guarantee uniqueness
+3. If the cleaned name is empty (or becomes all underscores after
+   stripping), uses a full SHA256 hash of the original filename as
+   the entire base
+4. If the cleaned name collides with a previously seen name, appends
+   the full SHA256 hash (prepended by '_') to guarantee uniqueness
 
-All collision checking is done via a shared 'seen' dict passed by the caller.
+All collision checking is done via a shared 'seen' dict passed by
+the caller.
 """
 
 import hashlib
 
 
 def sanitize_filename(filename: str, seen: dict) -> str:
-    """Return a UTF-8-safe filename.
+    """Return an ASCII-only filename derived from the original.
 
-    The filename is cleaned in-place by replacing any byte that cannot
-    be represented in UTF-8 with an underscore ('_').  The original file
-    extension is always preserved.
+    Every byte in the filename that falls outside the ASCII range
+    (0x00–0x7F) is replaced with an underscore ('_').  The original
+    file extension is preserved unchanged.
 
-    When the cleaned name is empty or collides with a name already
-    recorded in *seen*, the full SHA-256 hash of the original filename
-    (64 hex characters) is appended using an underscore separator.
+    When the cleaned name is empty (or consists only of underscores
+    after stripping) or collides with a name already recorded in
+    *seen*, the full SHA-256 hash of the original filename (64 hex
+    characters) is used — as the entire base when empty, or
+    appended with an underscore separator on collision.
 
     Args:
-        filename: The original filename (may contain non-UTF-8 bytes).
+        filename: The original filename (may contain non-ASCII bytes).
         seen:     A dict mapping cleaned names to the original name.
                   This dict is mutated to track uniqueness.
 
     Returns:
-        A filename guaranteed to be valid UTF-8, unique within the
-        lifetime of the *seen* dict, and sharing the original extension.
+        An ASCII-only filename, unique within the lifetime of the
+        *seen* dict, and sharing the original extension.
     """
     # ------------------------------------------------------------------
     # 1. Extract extension before any transformation
@@ -52,16 +57,16 @@ def sanitize_filename(filename: str, seen: dict) -> str:
         ext = ''
 
     # ------------------------------------------------------------------
-    # 2. Replace non-UTF-8 bytes with '_' in the base portion only
+    # 2. Convert base to ASCII-only by replacing every non-ASCII char
     # ------------------------------------------------------------------
     # On Linux, os.fsdecode() uses surrogateescape, producing surrogates
-    # for bytes that can't decode as UTF-8. Encode back to bytes first,
-    # then decode with 'replace' to get the replacement character, then
-    # replace that with '_'.
+    # for bytes that can't decode as any Unicode character.  Encode back
+    # to raw bytes first, then decode as ASCII with 'replace'.  Python's
+    # 'replace' produces U+FFFD (�), so replace that with '_'.
     raw_base_bytes = base.encode('utf-8', errors='surrogateescape')
-    cleaned_base = raw_base_bytes.decode('utf-8', errors='replace').replace('\ufffd', '_')
+    cleaned_base = raw_base_bytes.decode('ascii', errors='replace').replace('\ufffd', '_')
 
-    # If base was entirely non-UTF-8 it may now be all underscores.
+    # If base was entirely non-ASCII it may now be all underscores.
     # Treat a name consisting only of '_' as "empty".
     stripped = cleaned_base.strip('_')
 
@@ -74,7 +79,7 @@ def sanitize_filename(filename: str, seen: dict) -> str:
     # 4. Build candidate and check for collisions / emptiness
     # ------------------------------------------------------------------
     if not stripped:
-        # All bytes were non-UTF-8 → use hash as the entire base
+        # All bytes were non-ASCII → use hash as the entire base
         candidate = f"{hash_hex}{ext}"
     else:
         candidate = f"{cleaned_base}{ext}"
