@@ -74,6 +74,7 @@ from config_manager import ScannerConfig
 from path_handler import PathHandler
 from logger_config import setup_logging
 from zip_archive import ZipArchiveManager
+from safe_filename import sanitize_filename
 import os
 import shutil
 import argparse
@@ -330,6 +331,9 @@ def discover_files(input_directory):
     archive_files = set()
     other_files = set()
 
+    # Shared collision-tracking dict across all discovered files
+    seen = {}
+
     # Recursively walk through input_directory
     logger.info(f"Scanning input directory: {input_directory}")
     for root, dirs, files in os.walk(str(input_directory)):
@@ -339,8 +343,11 @@ def discover_files(input_directory):
             full_path = os.path.join(root, file)
             file_nameonly, file_extension = os.path.splitext(file)
 
-            # Create a tuple with the file name, subdirectory, root, and full path
-            file_info = (file, sub_dir, full_path)
+            # Sanitize filename for API compatibility (UTF-8 only)
+            safe_file_name = sanitize_filename(file, seen)
+
+            # Create a 4-tuple: (real_name, safe_name, sub_dir, full_path)
+            file_info = (file, safe_file_name, sub_dir, full_path)
 
             if file_extension.lower() in archive_extensions:
                 archive_files.add(file_info)
@@ -414,8 +421,8 @@ def process_discovered_files(archive_files, other_files, config, url, url_tex=''
     if len(archive_files) > 0:
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
-            file_name, sub_dir, full_path = file_info
-            result = process_files(file_name, sub_dir, full_path, config, url, url_tex, zip_config=zip_mgr)
+            file_name, safe_file_name, sub_dir, full_path = file_info
+            result = process_files(file_name, safe_file_name, sub_dir, full_path, config, url, url_tex, zip_config=zip_mgr)
             all_files.append(result)
     
     # Consolidate temp directory files into the zip (multiprocessing mode)
@@ -469,12 +476,13 @@ def find_and_delete_empty_subdirectories(input_directory):
                 except Exception as e:
                     logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
 
-def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_config=None):
+def process_files(file_name, safe_file_name, sub_dir, full_path, config, url, url_tex='', zip_config=None):
     """
     Process a single file through the TE API.
     
     Args:
-        file_name: Name of the file
+        file_name: Real name of the file (used for local filesystem ops, logging)
+        safe_file_name: UTF-8-safe name (used for API calls)
         sub_dir: Subdirectory relative to input_directory
         full_path: Full path to the file
         config: ScannerConfig object
@@ -501,6 +509,7 @@ def process_files(file_name, sub_dir, full_path, config, url, url_tex='', zip_co
             url, 
             url_tex,
             file_name, 
+            safe_file_name, 
             sub_dir, 
             full_path, 
             config.input_directory,

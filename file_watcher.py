@@ -17,6 +17,7 @@ from pathlib import Path
 from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler, FileSystemEvent
+from safe_filename import sanitize_filename
 
 
 class CopyCompletionWatcher(FileSystemEventHandler):
@@ -360,6 +361,7 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                 # Extract file info
                 file_obj = Path(file_path)
                 file_name = file_obj.name
+                safe_file_name = sanitize_filename(file_name)
                 sub_dir = str(file_obj.parent.relative_to(config.input_directory))
                 full_path = str(file_obj)
                 
@@ -375,6 +377,7 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
                     url,
                     url_tex,
                     file_name,
+                    safe_file_name,
                     sub_dir,
                     full_path,
                     config.input_directory,

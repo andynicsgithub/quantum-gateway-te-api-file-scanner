@@ -82,10 +82,11 @@ class TE(object):
      3. Write the TE results (last query/upload response info) into the output folder.
           If resulted TE verdict is malicious then also download the TE report and write it into the output folder.
     """
-    def __init__(self, url, url_tex, file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory, tex_api_key='', zip_config=None, config=None):
+    def __init__(self, url, url_tex, file_name, safe_file_name, sub_dir, full_path, input_directory, reports_directory, benign_directory, quarantine_directory, error_directory, tex_api_key='', zip_config=None, config=None):
         self.url = url
         self.url_tex = url_tex
         self.file_name = file_name
+        self.safe_file_name = safe_file_name
         self.sub_dir = sub_dir
         # Convert to Path objects for cross-platform compatibility
         self.full_path = Path(full_path) if not isinstance(full_path, Path) else full_path
@@ -348,9 +349,9 @@ class TE(object):
                     "protocol_version": "1.1",
                     "api_key": self.tex_api_key,
                     "request_name": "UploadFile",
-                    "file_orig_name": self.file_name,
+                    "file_orig_name": self.safe_file_name,
                     "te_options": {
-                        "file_name": self.file_name,
+                        "file_name": self.safe_file_name,
                         "file_type": file_ext,
                         "is_base64": True,
                         "features": ["te", "te_eb", "av"],
