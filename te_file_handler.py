@@ -66,8 +66,7 @@ from tex_results import TEX
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
-SECONDS_TO_WAIT = 15
-MAX_RETRIES = 120
+# seconds_to_wait and max_retries loaded from config in __init__
 
 
 class TE(object):
@@ -97,6 +96,8 @@ class TE(object):
         self.error_directory = Path(error_directory) if not isinstance(error_directory, Path) else error_directory
         self.tex_api_key = tex_api_key
         self.config = config
+        self.seconds_to_wait = config.seconds_to_wait if config else 15
+        self.max_retries = config.max_retries if config else 120
         # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
         # For multiprocessing: passed as tuple since ZipArchiveManager can't be shared across processes
         # For watch mode (single process): can be a ZipArchiveManager instance
@@ -223,7 +224,7 @@ class TE(object):
         :return the (last) query response with the handled file TE results
         """
         self.logger.debug("{} - Start sending Query requests of te and te_eb after TE upload".format(self.log_path))
-        time.sleep(SECONDS_TO_WAIT)
+        time.sleep(self.seconds_to_wait)
         request = copy.deepcopy(self.request_template)
         request['request'][0]['sha1'] = self.sha1
         data = json.dumps(request)
@@ -260,9 +261,9 @@ class TE(object):
                     if no_pending_image:
                         break
             self.logger.debug("{} - te and te_eb Query response status : {}".format(self.log_path, status_label))
-            time.sleep(SECONDS_TO_WAIT)
+            time.sleep(self.seconds_to_wait)
             retry_no += 1
-            if retry_no == MAX_RETRIES:
+            if retry_no == self.max_retries:
                 self.logger.debug("{} - Reached query max retries. Stop waiting for te results".format(self.log_path))
                 break
         return response_j
@@ -417,13 +418,13 @@ class TE(object):
             return
         
         file_ext = self.file_name.rsplit('.', 1)[-1].lower() if '.' in self.file_name else ''
-        if config.tex_supported_file_types and file_ext not in config.tex_supported_file_types:
+        if self.config.tex_supported_file_types and file_ext not in self.config.tex_supported_file_types:
             self._tex_status = 'unsupported'
             self.logger.info(f"Skipping TEX — file type not enabled: {self.log_path} ({file_ext})")
             return
         
         try:
-            upload_response = self._upload_for_tex(config)
+            upload_response = self._upload_for_tex(self.config)
             if upload_response is None:
                 self.logger.warning(f"TEX upload returned no response for {self.log_path}")
                 return

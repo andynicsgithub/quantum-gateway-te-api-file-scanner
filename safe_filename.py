@@ -73,7 +73,7 @@ def sanitize_filename(filename: str, seen: dict) -> str:
     # ------------------------------------------------------------------
     # 3. Compute SHA-256 of the original filename bytes
     # ------------------------------------------------------------------
-    hash_hex = hashlib.sha256(filename.encode('utf-8', errors='replace')).hexdigest()
+    hash_hex = hashlib.sha256(filename.encode('utf-8', errors='surrogateescape')).hexdigest()
 
     # ------------------------------------------------------------------
     # 4. Build candidate and check for collisions / emptiness

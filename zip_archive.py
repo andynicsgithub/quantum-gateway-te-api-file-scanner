@@ -12,7 +12,7 @@ In single-process mode (watch mode), files are added directly to the zip.
 
 import os
 import shutil
-import zipfile
+import pyzipper
 import logging
 from pathlib import Path
 
@@ -40,9 +40,10 @@ class ZipArchiveManager:
     def _open(self):
         """Open the zip file for writing."""
         self.archive_dir.mkdir(parents=True, exist_ok=True)
-        self._zip_file = zipfile.ZipFile(
+        self._zip_file = pyzipper.AESZipFile(
             str(self.zip_path), 'w',
-            compression=zipfile.ZIP_DEFLATED
+            compression=pyzipper.ZIP_DEFLATED,
+            encryption=pyzipper.WZ_AES
         )
         self._zip_file.setpassword(self.password.encode('utf-8'))
     

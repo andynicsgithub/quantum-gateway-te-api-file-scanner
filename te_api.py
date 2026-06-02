@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v11.1 (alpha)
+te_api v11.2 (alpha)
 A Python client-side utility for interacting with the Threat Emulation API.
 Features:
   - Scan input files in a specified directory
@@ -27,9 +27,17 @@ Changes in v9.2 over v9.1:
   2. Zip created concurrently with file moves to verdict directories
   3. Configurable via config.ini, environment variables, and CLI args
 
-Changes in v11.1 over v11.0:
-    1. Added log_path to all log messages to distinguish files with same name in different subdirectories
-    2. Updated "Handling file" log to show sub_dir/file_name format
+Changes in v11.2 over v11.1:
+     1. Fixed NameError in TEX processing (config → self.config)
+     2. Fixed NameError in TEX error handler (E → e)
+     3. Removed hardcoded SECONDS_TO_WAIT/MAX_RETRIES — now read from config with 15/120 fallback
+     4. Fixed seconds_to_wait default to match config.ini.default (10)
+     5. Renamed --zip_password CLI flag to --zip-password
+     6. Added zip_password to CLI config mappings
+
+ Changes in v11.1 over v11.0:
+     1. Added log_path to all log messages to distinguish files with same name in different subdirectories
+     2. Updated "Handling file" log to show sub_dir/file_name format
 
 Changes in v11.0 over v10.0:
     1. Added configurable email subject and body templates via string.Template
@@ -139,12 +147,14 @@ def main():
     
     # Zip archive CLI args
     parser.add_argument('-za', '--zip_archive_directory', help='Directory to store password-protected zip archives of processed files')
-    parser.add_argument('--zip_password', help='Password for zip archives (empty or not provided = no zip archive)')
+    parser.add_argument('--zip-password', help='Password for zip archives (empty or not provided = no zip archive)')
     
     # TEX (Scrub) CLI args
     parser.add_argument('--tex-enabled', action='store_true', help='Enable TEX (Threat Extraction/Scrub) processing')
     parser.add_argument('--tex-url', help='TEX API URL (e.g., https://appliance-ip/UserCheck/TPAPI)')
     parser.add_argument('--tex-api-key', help='TEX API key')
+    parser.add_argument('--tex-response-info-dir', help='TEX response info directory')
+    parser.add_argument('--tex-clean-files-dir', help='TEX clean files directory')
     args = parser.parse_args()
     
     # =======================
@@ -381,24 +391,17 @@ def process_discovered_files(archive_files, other_files, config, url, url_tex=''
     all_files = []
     
    # Build temp directory and zip config for multiprocessing workers
-    def _get_dir_basename(path_obj):
-        """Get last path component robustly for both local and UNC paths."""
-        p = str(path_obj).rstrip('/\\')
-        idx = max(p.rfind('/'), p.rfind('\\'))
-        return p[idx+1:] if idx >= 0 else p
-
     zip_config = None
     temp_dir = None
     verdict_basenames = [
-        _get_dir_basename(config.benign_directory),
-        _get_dir_basename(config.quarantine_directory),
-        _get_dir_basename(config.error_directory)
+        config.benign_directory.name,
+        config.quarantine_directory.name,
+        config.error_directory.name
     ]
     if zip_mgr:
         temp_dir = str(Path(config.zip_archive_directory) / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}")
         os.makedirs(temp_dir, exist_ok=True)
         logger.info(f"Zip temp directory: {temp_dir}")
-        logger.info(f"Zip config tuple: {zip_config is not None}, len={len(zip_config) if zip_config else 0}")
         zip_config = (
             str(zip_mgr.zip_path),
             config.zip_password,

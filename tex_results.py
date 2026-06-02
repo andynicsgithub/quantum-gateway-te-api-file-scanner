@@ -144,8 +144,8 @@ class TEX(object):
             else:
                 self.logger.info(f"TEX extract result: {return_relevant_enum(self.scrub_result)}")
             return is_cleaned
-        except Exception as E:
-            self.logger.error(f"Processing TEX results failed for {self.log_path}: {E}", exc_info=True)
+        except Exception as e:
+            self.logger.error(f"Processing TEX results failed for {self.log_path}: {e}", exc_info=True)
             raise
     
     def _create_response_info(self, response):
@@ -171,7 +171,7 @@ class TEX(object):
         self.scrub_result = scrub_response.get("scrub_result", -1)
         
         # Store clean file data before potentially removing it from the response
-        self.clean_file_data = copy.deepcopy(scrub_response.get("file_enc_data", ""))
+        self.clean_file_data = scrub_response.get("file_enc_data", "")
         
         # Build response filename
         response_filename = f"{self.file_name}.response.txt"

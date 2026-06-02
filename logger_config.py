@@ -71,7 +71,7 @@ def setup_logging(log_dir: Optional[Path] = None, log_level=logging.INFO,
         
     except Exception as e:
         # Fallback to console-only if file logging fails
-        print(f"WARNING: Could not setup file logging: {e}")
+        print(f"WARNING: Could not setup file logging: {e}", file=sys.stderr)
         console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setFormatter(logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s',

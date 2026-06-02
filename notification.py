@@ -8,6 +8,7 @@ and optional IMAP "Sent" folder saving.
 """
 
 import smtplib
+import ssl
 import os
 import logging
 import imaplib
@@ -57,7 +58,8 @@ def send_batch_notification(config, summary):
         server.ehlo()
         
         if config.email_use_tls:
-            server.starttls()
+            ssl_ctx = ssl.create_default_context()
+            server.starttls(context=ssl_ctx)
             server.ehlo()
         
         if config.email_username and config.email_password:

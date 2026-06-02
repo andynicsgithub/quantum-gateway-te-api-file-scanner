@@ -107,7 +107,7 @@ class PathHandler:
                     # Try to detect CIFS/SMB filesystem
                     # This requires the path to exist
                     result = subprocess.run(
-                        ['stat', '-f', '-c', '%T', str(path)],
+                        ['stat', '--file-system', '--format=%T', str(path)],
                         capture_output=True,
                         text=True,
                         timeout=2
@@ -192,7 +192,7 @@ class PathHandler:
         Args:
             src: Source file path
             dst: Destination file path
-            verify_checksum: If True, verify SHA1 after move. Auto-enabled for SMB paths.
+            verify_checksum: If True, verify SHA256 after move. Auto-enabled for SMB paths.
             retry_count: Number of retry attempts
             
         Returns:
@@ -206,7 +206,7 @@ class PathHandler:
         src_checksum = None
         if verify_checksum:
             try:
-                src_checksum = PathHandler._calculate_sha1(src)
+                src_checksum = PathHandler._calculate_checksum(src)
             except Exception as e:
                 return False, f"Failed to calculate source checksum: {e}"
         
@@ -228,7 +228,7 @@ class PathHandler:
                 
                 # Verify checksum if required
                 if verify_checksum and src_checksum:
-                    dst_checksum = PathHandler._calculate_sha1(dst)
+                    dst_checksum = PathHandler._calculate_checksum(dst)
                     if src_checksum != dst_checksum:
                         # Checksum mismatch - delete corrupted destination
                         try:
@@ -270,24 +270,24 @@ class PathHandler:
         return False, f"Failed to move file after {retry_count} attempts: {last_error}"
     
     @staticmethod
-    def _calculate_sha1(file_path: Path) -> str:
+    def _calculate_checksum(file_path: Path) -> str:
         """
-        Calculate SHA1 hash of file.
-        
+        Calculate SHA256 hash of file.
+
         Args:
             file_path: Path to file
-            
+
         Returns:
-            SHA1 hash as hexadecimal string
+            SHA256 hash as hexadecimal string
         """
-        sha1 = hashlib.sha1()
+        sha = hashlib.sha256()
         with open(file_path, 'rb') as f:
             while True:
                 block = f.read(2 ** 10)  # 1KB blocks
                 if not block:
                     break
-                sha1.update(block)
-        return sha1.hexdigest()
+                sha.update(block)
+        return sha.hexdigest()
     
     @staticmethod
     def supports_long_paths() -> bool:

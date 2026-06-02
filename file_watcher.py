@@ -179,9 +179,11 @@ class CopyCompletionWatcher(FileSystemEventHandler):
                     continue
             
             if self.max_batch > 0 and len(self.pending_files) >= self.max_batch:
-                # Max batch reached, process all
-                still_copying = True
-                continue
+                # Max batch reached — add all pending files to stale for immediate processing
+                for fp, info in self.pending_files.items():
+                    stale_files[fp] = info
+                still_copying = False
+                break
             
             if time_since_last_modified >= self.batch_delay:
                 stale_files[file_path] = info
@@ -213,33 +215,6 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             self.batch_callback(file_paths)
         except Exception as e:
             self.logger.error(f"[WATCHER] Error in batch callback: {e}")
-            for path in file_paths:
-                if os.path.exists(path):
-                    self.pending_files[path] = {
-                        'created': time.time(),
-                        'last_modified': time.time(),
-                        'closed': True,
-                        'size': os.path.getsize(path)
-                    }
-    
-    def _trigger_batch(self):
-        """
-        Trigger batch processing.
-        """
-        if not self.pending_files:
-            return
-        
-        file_paths = list(self.pending_files.keys())
-        self.pending_files.clear()
-        
-        self.logger.info(f"Triggering batch processing: {len(file_paths)} files")
-        
-        # Call callback (process_batch function)
-        try:
-            self.batch_callback(file_paths)
-        except Exception as e:
-            self.logger.error(f"Error in batch callback: {e}")
-            # Put files back in pending to retry
             for path in file_paths:
                 if os.path.exists(path):
                     self.pending_files[path] = {
@@ -351,17 +326,24 @@ def start_watching(config, url, url_tex='', initial_zip_mgr=None):
             'all_files': []
         }
         
+        # Shared collision-tracking dict for sanitize_filename
+        seen = {}
+        
         for file_path in file_paths:
             # Verify file still exists
             if not os.path.exists(file_path):
                 batch_logger.warning(f"File no longer exists: {file_path}")
                 continue
             
+            # Initialize for except handler (B3: prevent NameError if sanitize_filename fails before sub_dir assignment)
+            sub_dir = ''
+            file_name = file_path
+            
             try:
                 # Extract file info
                 file_obj = Path(file_path)
                 file_name = file_obj.name
-                safe_file_name = sanitize_filename(file_name)
+                safe_file_name = sanitize_filename(file_name, seen)
                 sub_dir = str(file_obj.parent.relative_to(config.input_directory))
                 full_path = str(file_obj)
                 

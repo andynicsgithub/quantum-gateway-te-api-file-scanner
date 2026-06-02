@@ -28,7 +28,7 @@ class ScannerConfig:
     error_directory: Path
     appliance_ip: str
     concurrency: int = 4
-    seconds_to_wait: int = 15
+    seconds_to_wait: int = 10
     max_retries: int = 120
     watch_mode: bool = False
     
@@ -66,10 +66,10 @@ class ScannerConfig:
     tex_enabled: bool = False
     tex_url: str = ''
     tex_api_key: str = ''
-    tex_response_info_directory: str = 'tex_response_info'
-    tex_clean_files_directory: str = 'tex_clean_files'
-    tex_supported_file_types: set = field(default_factory=set)
-    tex_scrubbed_parts_codes: set = field(default_factory=set)
+    tex_response_info_directory: Path = field(default_factory=lambda: Path('tex_response_info'))
+    tex_clean_files_directory: Path = field(default_factory=lambda: Path('tex_clean_files'))
+    tex_supported_file_types: set[str] = field(default_factory=set)
+    tex_scrubbed_parts_codes: set[int] = field(default_factory=set)
     
     # Logging configuration
     log_level: str = 'INFO'
@@ -162,7 +162,7 @@ class ScannerConfig:
             'error_directory': 'error_files',
             'appliance_ip': '',
             'concurrency': 4,
-            'seconds_to_wait': 15,
+            'seconds_to_wait': 10,
             'max_retries': 120,
             'watch_mode': False,
             'watch_batch_delay': 5,
@@ -328,87 +328,57 @@ class ScannerConfig:
         
         # 4. Override with command-line arguments (highest priority)
         if cli_args:
-            if hasattr(cli_args, 'input_directory') and cli_args.input_directory:
-                config_data['input_directory'] = cli_args.input_directory
-            if hasattr(cli_args, 'reports_directory') and cli_args.reports_directory:
-                config_data['reports_directory'] = cli_args.reports_directory
-            if hasattr(cli_args, 'appliance_ip') and cli_args.appliance_ip:
-                config_data['appliance_ip'] = cli_args.appliance_ip
-            if hasattr(cli_args, 'benign_directory') and cli_args.benign_directory:
-                config_data['benign_directory'] = cli_args.benign_directory
-            if hasattr(cli_args, 'quarantine_directory') and cli_args.quarantine_directory:
-                config_data['quarantine_directory'] = cli_args.quarantine_directory
-            if hasattr(cli_args, 'error_directory') and cli_args.error_directory:
-                config_data['error_directory'] = cli_args.error_directory
-            if hasattr(cli_args, 'concurrency') and cli_args.concurrency:
-                config_data['concurrency'] = cli_args.concurrency
-            if hasattr(cli_args, 'watch') and cli_args.watch:
-                config_data['watch_mode'] = cli_args.watch
-            # Watcher-specific CLI args
-            if hasattr(cli_args, 'watch_delay') and cli_args.watch_delay:
-                config_data['watch_batch_delay'] = cli_args.watch_delay
-            if hasattr(cli_args, 'watch_min') and cli_args.watch_min:
-                config_data['watch_min_batch'] = cli_args.watch_min
-            if hasattr(cli_args, 'watch_max') and cli_args.watch_max:
-                config_data['watch_max_batch'] = cli_args.watch_max
+            # (cli_attr, config_key) mappings — applies getattr(cli_args, attr) if truthy
+            _cli_mappings = [
+                ('input_directory', 'input_directory'),
+                ('reports_directory', 'reports_directory'),
+                ('appliance_ip', 'appliance_ip'),
+                ('benign_directory', 'benign_directory'),
+                ('quarantine_directory', 'quarantine_directory'),
+                ('error_directory', 'error_directory'),
+                ('concurrency', 'concurrency'),
+                ('watch', 'watch_mode'),
+                ('watch_delay', 'watch_batch_delay'),
+                ('watch_min', 'watch_min_batch'),
+                ('watch_max', 'watch_max_batch'),
+                ('email_enabled', 'email_enabled'),
+                ('email_smtp_server', 'email_smtp_server'),
+                ('email_smtp_port', 'email_smtp_port'),
+                ('email_use_tls', 'email_use_tls'),
+                ('email_username', 'email_username'),
+                ('email_password', 'email_password'),
+                ('email_from', 'email_from'),
+                ('email_to', 'email_to'),
+                ('email_subject_template', 'email_subject_template'),
+                ('email_template_file', 'email_template_file'),
+                ('email_imap_enabled', 'email_imap_enabled'),
+                ('email_imap_server', 'email_imap_server'),
+                ('email_imap_port', 'email_imap_port'),
+                ('email_imap_use_ssl', 'email_imap_use_ssl'),
+                ('email_imap_username', 'email_imap_username'),
+                ('email_imap_password', 'email_imap_password'),
+                ('email_imap_folder', 'email_imap_folder'),
+                ('zip_archive_directory', 'zip_archive_directory'),
+                ('tex_enabled', 'tex_enabled'),
+                ('tex_url', 'tex_url'),
+                ('tex_api_key', 'tex_api_key'),
+                ('tex_response_info_directory', 'tex_response_info_directory'),
+                ('tex_clean_files_directory', 'tex_clean_files_directory'),
+                ('zip_password', 'zip_password'),
+            ]
+            for cli_attr, config_key in _cli_mappings:
+                val = getattr(cli_args, cli_attr, None)
+                if val:
+                    config_data[config_key] = val
             
-            # Email CLI args
-            if hasattr(cli_args, 'email_enabled') and cli_args.email_enabled:
-                config_data['email_enabled'] = cli_args.email_enabled
-            if hasattr(cli_args, 'email_smtp_server') and cli_args.email_smtp_server:
-                config_data['email_smtp_server'] = cli_args.email_smtp_server
-            if hasattr(cli_args, 'email_smtp_port') and cli_args.email_smtp_port:
-                config_data['email_smtp_port'] = cli_args.email_smtp_port
-            if hasattr(cli_args, 'email_use_tls') and cli_args.email_use_tls:
-                config_data['email_use_tls'] = cli_args.email_use_tls
-            if hasattr(cli_args, 'email_username') and cli_args.email_username:
-                config_data['email_username'] = cli_args.email_username
-            if hasattr(cli_args, 'email_password') and cli_args.email_password:
-                config_data['email_password'] = cli_args.email_password
-            if hasattr(cli_args, 'email_from') and cli_args.email_from:
-                config_data['email_from'] = cli_args.email_from
-            if hasattr(cli_args, 'email_to') and cli_args.email_to:
-                config_data['email_to'] = cli_args.email_to
-            if hasattr(cli_args, 'email_subject_template') and cli_args.email_subject_template:
-                config_data['email_subject_template'] = cli_args.email_subject_template
-            if hasattr(cli_args, 'email_template_file') and cli_args.email_template_file:
-                config_data['email_template_file'] = cli_args.email_template_file
-            if hasattr(cli_args, 'email_imap_enabled') and cli_args.email_imap_enabled:
-                config_data['email_imap_enabled'] = cli_args.email_imap_enabled
-            if hasattr(cli_args, 'email_imap_server') and cli_args.email_imap_server:
-                config_data['email_imap_server'] = cli_args.email_imap_server
-            if hasattr(cli_args, 'email_imap_port') and cli_args.email_imap_port:
-                config_data['email_imap_port'] = cli_args.email_imap_port
-            if hasattr(cli_args, 'email_imap_use_ssl') and cli_args.email_imap_use_ssl:
-                config_data['email_imap_use_ssl'] = cli_args.email_imap_use_ssl
-            if hasattr(cli_args, 'email_imap_username') and cli_args.email_imap_username:
-                config_data['email_imap_username'] = cli_args.email_imap_username
-            if hasattr(cli_args, 'email_imap_password') and cli_args.email_imap_password:
-                config_data['email_imap_password'] = cli_args.email_imap_password
-            if hasattr(cli_args, 'email_imap_folder') and cli_args.email_imap_folder:
-                config_data['email_imap_folder'] = cli_args.email_imap_folder
-            
-            # Zip archive CLI args
-            if hasattr(cli_args, 'zip_archive_directory') and cli_args.zip_archive_directory:
-                config_data['zip_archive_directory'] = cli_args.zip_archive_directory
-            if hasattr(cli_args, 'zip_password') and cli_args.zip_password is not None:
+            # zip_password needs `is not None` instead of truthiness check
+            if getattr(cli_args, 'zip_password', None) is not None:
                 config_data['zip_password'] = cli_args.zip_password
-            
-            # TEX CLI args
-            if hasattr(cli_args, 'tex_enabled') and cli_args.tex_enabled:
-                config_data['tex_enabled'] = cli_args.tex_enabled
-            if hasattr(cli_args, 'tex_url') and cli_args.tex_url:
-                config_data['tex_url'] = cli_args.tex_url
-            if hasattr(cli_args, 'tex_api_key') and cli_args.tex_api_key:
-                config_data['tex_api_key'] = cli_args.tex_api_key
-            if hasattr(cli_args, 'tex_response_info_directory') and cli_args.tex_response_info_directory:
-                config_data['tex_response_info_directory'] = cli_args.tex_response_info_directory
-            if hasattr(cli_args, 'tex_clean_files_directory') and cli_args.tex_clean_files_directory:
-                config_data['tex_clean_files_directory'] = cli_args.tex_clean_files_directory
         
         # Normalize all paths
         path_keys = ['input_directory', 'reports_directory', 'benign_directory',
-                      'quarantine_directory', 'error_directory', 'zip_archive_directory', 'log_dir']
+                       'quarantine_directory', 'error_directory', 'zip_archive_directory', 'log_dir',
+                       'tex_response_info_directory', 'tex_clean_files_directory']
         for key in path_keys:
             config_data[key] = PathHandler.normalize_path(config_data[key])
         
@@ -421,7 +391,7 @@ class ScannerConfig:
                 except (ValueError, TypeError):
                     print(f"Warning: Could not convert {key} to integer, using default")
                     # Reset to default value based on field
-                    defaults = {'concurrency': 4, 'seconds_to_wait': 15, 'max_retries': 120, 
+                    defaults = {'concurrency': 4, 'seconds_to_wait': 10, 'max_retries': 120, 
                                 'max_log_size_mb': 10, 'backup_count': 5, 'email_smtp_port': 587, 'email_imap_port': 993}
                     config_data[key] = defaults.get(key, 0)
         
