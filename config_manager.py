@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-config_manager.py v11.1 (alpha)
+config_manager.py v11.2 (alpha)
 Type-safe configuration management for TE API Scanner.
 Supports loading from config file, command-line arguments, and environment variables.
 """
@@ -364,14 +364,13 @@ class ScannerConfig:
                 ('tex_api_key', 'tex_api_key'),
                 ('tex_response_info_directory', 'tex_response_info_directory'),
                 ('tex_clean_files_directory', 'tex_clean_files_directory'),
-                ('zip_password', 'zip_password'),
             ]
             for cli_attr, config_key in _cli_mappings:
                 val = getattr(cli_args, cli_attr, None)
                 if val:
                     config_data[config_key] = val
             
-            # zip_password needs `is not None` instead of truthiness check
+            # zip_password uses `is not None` because empty string is falsy but valid
             if getattr(cli_args, 'zip_password', None) is not None:
                 config_data['zip_password'] = cli_args.zip_password
         

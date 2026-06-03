@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v11.1 (alpha)
+te_file_handler v11.2 (alpha)
 A Python module for handling individual file processing via the Threat Emulation API.
 Features:
   - Checks TE cache before upload
@@ -96,7 +96,7 @@ class TE(object):
         self.error_directory = Path(error_directory) if not isinstance(error_directory, Path) else error_directory
         self.tex_api_key = tex_api_key
         self.config = config
-        self.seconds_to_wait = config.seconds_to_wait if config else 15
+        self.seconds_to_wait = config.seconds_to_wait if config else 10
         self.max_retries = config.max_retries if config else 120
         # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
         # For multiprocessing: passed as tuple since ZipArchiveManager can't be shared across processes
@@ -399,7 +399,7 @@ class TE(object):
             self.logger.error(f"TEX upload preparation failed for {self.log_path}: {E}", exc_info=True)
             return None
     
-    def _process_tex_results(self, config):
+    def _process_tex_results(self):
         """
         Upload file to TPAPI and process TEX (Scrub) results.
         This is a separate flow from TE Cloud API processing.
@@ -409,9 +409,6 @@ class TE(object):
             'not_cleaned' - TEX processed but found nothing to remove
             'unsupported' - File type not supported by TEX
         None = TEX was not processed
-        
-        Args:
-            config: ScannerConfig object with tex_* fields
         """
         if not self.config.tex_enabled or not self.url_tex or not self.tex_api_key:
             self._tex_status = None
@@ -424,7 +421,7 @@ class TE(object):
             return
         
         try:
-            upload_response = self._upload_for_tex(self.config)
+            upload_response = self._upload_for_tex()
             if upload_response is None:
                 self.logger.warning(f"TEX upload returned no response for {self.log_path}")
                 return

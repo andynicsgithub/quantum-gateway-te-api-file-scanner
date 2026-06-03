@@ -121,9 +121,9 @@ def main():
     parser.add_argument('-jail', '--quarantine_directory', help='the directory to move Malicious files after scanning')
     parser.add_argument('-error', '--error_directory', help='the directory to move files which cause a scanning error')
     parser.add_argument('--watch', action='store_true', help='Watch mode: monitor directory for new files continuously')
-    parser.add_argument('--watch-delay', type=int, default=5, help='Seconds to wait after last file activity before processing batch (default: 5)')
-    parser.add_argument('--watch-min', type=int, default=0, help='Minimum files to trigger batch (0 = process immediately after delay)')
-    parser.add_argument('--watch-max', type=int, default=0, help='Maximum batch size (0 = unlimited)')
+    parser.add_argument('--watch-delay', type=int, help='Seconds to wait after last file activity before processing batch (default: from config)')
+    parser.add_argument('--watch-min', type=int, help='Minimum files to trigger batch (0 = from config)')
+    parser.add_argument('--watch-max', type=int, help='Maximum batch size (0 = unlimited, from config)')
     
     # Email notification CLI args
     parser.add_argument('--email-enabled', action='store_true', help='Enable email notifications on batch completion')
@@ -173,7 +173,7 @@ def main():
         backup_count=config.backup_count
     )
     
-    logger.info("TE API Scanner v11.1 - Loading configuration...")
+    logger.info("TE API Scanner v11.2 - Loading configuration...")
     
     # Display configuration summary
     config.print_summary()
@@ -336,7 +336,7 @@ def discover_files(input_directory):
     logger = logging.getLogger('te_scanner.main')
     
     # Identify archive vs other files
-    archive_extensions = [".7z", ".arj", ".bz2", ".CAB", ".dmg", ".gz", ".img", ".iso", ".msi", ".pkg", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
+    archive_extensions = [".7z", ".arj", ".bz2", ".cab", ".dmg", ".gz", ".img", ".iso", ".msi", ".pkg", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
 
     archive_files = set()
     other_files = set()
@@ -390,7 +390,7 @@ def process_discovered_files(archive_files, other_files, config, url, url_tex=''
     # Collect results for email notification
     all_files = []
     
-   # Build temp directory and zip config for multiprocessing workers
+    # Build temp directory and zip config for multiprocessing workers
     zip_config = None
     temp_dir = None
     verdict_basenames = [

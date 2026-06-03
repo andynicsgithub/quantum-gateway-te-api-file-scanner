@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-notification.py v11.1 (alpha)
+notification.py v11.2 (alpha)
 Email notification system for TE API Scanner.
 Sends batch completion notifications via SMTP with configurable templates
 and optional IMAP "Sent" folder saving.
@@ -70,9 +70,9 @@ def send_batch_notification(config, summary):
         
         logger.info(f"Email notification sent to {config.email_to}: {subject}")
         
-        # Save to IMAP "Sent" folder if enabled
+       # Save to IMAP "Sent" folder if enabled
         if config.email_imap_enabled:
-            _save_to_imap(config, msg, body, subject)
+            _save_to_imap(config, body, subject)
         
     except Exception as e:
         logger.warning(f"Failed to send email notification: {e}")
@@ -264,7 +264,7 @@ def _get_tex_status_message(tex_status):
         return ''
 
 
-def _save_to_imap(config, msg, body, subject):
+def _save_to_imap(config, body, subject):
     """
     Save the sent email to an IMAP 'Sent' folder.
     
