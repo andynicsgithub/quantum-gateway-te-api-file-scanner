@@ -12,10 +12,13 @@ import ssl
 import os
 import logging
 import imaplib
+from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
 from string import Template
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
 
 
 def send_batch_notification(config, summary):
@@ -115,13 +118,19 @@ def _build_email_body(config, summary):
 
     Uses the configured template file if available, falling back to
     the legacy _build_legacy_body() if no template file is found.
+    Template paths are resolved relative to the script directory.
     """
     template_file = (
         getattr(config, "email_template_file", None) or "data/email_template.txt"
     )
 
-    if os.path.isfile(template_file):
-        return _render_template(template_file, config, summary)
+    # Resolve relative to script directory so it works regardless of CWD
+    resolved = Path(template_file)
+    if not resolved.is_absolute():
+        resolved = _SCRIPT_DIR / resolved
+
+    if resolved.is_file():
+        return _render_template(str(resolved), config, summary)
 
     # Fallback to legacy behavior
     return _build_legacy_body(config, summary)

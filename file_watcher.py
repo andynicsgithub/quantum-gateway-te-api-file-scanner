@@ -456,6 +456,8 @@ def start_watching(config, url, url_tex="", initial_zip_mgr=None):
         except Exception as e:
             batch_logger.warning(f"Email notification failed: {e}")
 
+        batch_logger.info("Batch processing complete, waiting for new files...")
+
     # Create and start watcher
     try:
         watcher_thread = WatcherThread(config, process_batch_callback)
