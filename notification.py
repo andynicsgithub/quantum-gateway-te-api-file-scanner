@@ -59,7 +59,10 @@ def send_batch_notification(config, summary):
         server.ehlo()
 
         if config.email_use_tls:
-            ssl_ctx = ssl.create_default_context()
+            if getattr(config, "email_skip_tls_verify", False):
+                ssl_ctx = ssl._create_unverified_context()
+            else:
+                ssl_ctx = ssl.create_default_context()
             server.starttls(context=ssl_ctx)
             server.ehlo()
 

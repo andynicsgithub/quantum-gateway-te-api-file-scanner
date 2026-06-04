@@ -96,6 +96,11 @@ def main():
     parser.add_argument(
         "--email-use-tls", action="store_true", help="Use TLS for SMTP connection"
     )
+    parser.add_argument(
+        "--email-skip-tls-verify",
+        action="store_true",
+        help="Skip TLS certificate verification for SMTP server (use with self-signed certs)",
+    )
     parser.add_argument("--email-username", help="SMTP authentication username")
     parser.add_argument("--email-password", help="SMTP authentication password")
     parser.add_argument("--email-from", help="Sender email address")

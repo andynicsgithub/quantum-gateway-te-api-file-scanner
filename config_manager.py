@@ -43,6 +43,7 @@ class ScannerConfig:
     email_smtp_server: str = ""
     email_smtp_port: int = 587
     email_use_tls: bool = True
+    email_skip_tls_verify: bool = False
     email_username: str = ""
     email_password: str = ""
     email_from: str = ""
@@ -186,6 +187,7 @@ class ScannerConfig:
             "email_smtp_server": "",
             "email_smtp_port": 587,
             "email_use_tls": True,
+            "email_skip_tls_verify": False,
             "email_username": "",
             "email_password": "",
             "email_from": "",
@@ -235,6 +237,7 @@ class ScannerConfig:
                     "watch_mode",
                     "email_enabled",
                     "email_use_tls",
+                    "email_skip_tls_verify",
                     "email_imap_enabled",
                     "email_imap_use_ssl",
                 ]:
@@ -421,6 +424,7 @@ class ScannerConfig:
                 ("email_smtp_server", "email_smtp_server"),
                 ("email_smtp_port", "email_smtp_port"),
                 ("email_use_tls", "email_use_tls"),
+                ("email_skip_tls_verify", "email_skip_tls_verify"),
                 ("email_username", "email_username"),
                 ("email_password", "email_password"),
                 ("email_from", "email_from"),
@@ -570,6 +574,8 @@ class ScannerConfig:
                 f"  SMTP server:           {self.email_smtp_server}:{self.email_smtp_port}"
             )
             print(f"  TLS:                   {'Yes' if self.email_use_tls else 'No'}")
+            if self.email_use_tls:
+                print(f"  Skip TLS verify:       {'Yes' if self.email_skip_tls_verify else 'No'}")
             print(f"  From:                  {self.email_from}")
             print(f"  To:                    {self.email_to}")
             if self.email_username:

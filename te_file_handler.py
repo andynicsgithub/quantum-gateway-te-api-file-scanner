@@ -513,7 +513,7 @@ class TE(object):
             return
 
         try:
-            upload_response = self._upload_for_tex()
+            upload_response = self._upload_for_tex(self.config)
             if upload_response is None:
                 self.logger.warning(
                     f"TEX upload returned no response for {self.log_path}"
