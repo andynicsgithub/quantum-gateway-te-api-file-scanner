@@ -89,7 +89,7 @@ email_imap_folder = Sent
 log_level = INFO
 log_dir = ./logs
 max_log_size_mb = 10
-backup_count = 5
+log_retention_days = 90
 
 [TEX]
 tex_enabled = false

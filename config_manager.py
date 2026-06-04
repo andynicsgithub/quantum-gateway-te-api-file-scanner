@@ -86,7 +86,7 @@ class ScannerConfig:
     log_level: str = "INFO"
     log_dir: Path = field(default_factory=lambda: Path("logs"))
     max_log_size_mb: int = 10
-    backup_count: int = 5
+    log_retention_days: int = 90
 
     def validate(self) -> Tuple[bool, List[str]]:
         """
@@ -185,7 +185,7 @@ class ScannerConfig:
             "log_level": "INFO",
             "log_dir": "logs",
             "max_log_size_mb": 10,
-            "backup_count": 5,
+            "log_retention_days": 90,
             "email_enabled": False,
             "email_smtp_server": "",
             "email_smtp_port": 587,
@@ -227,7 +227,7 @@ class ScannerConfig:
                     "seconds_to_wait",
                     "max_retries",
                     "max_log_size_mb",
-                    "backup_count",
+                    "log_retention_days",
                     "watch_batch_delay",
                     "watch_min_batch",
                     "watch_max_batch",
@@ -267,7 +267,7 @@ class ScannerConfig:
                             "seconds_to_wait",
                             "max_retries",
                             "max_log_size_mb",
-                            "backup_count",
+                            "log_retention_days",
                             "watch_batch_delay",
                             "watch_min_batch",
                             "watch_max_batch",
@@ -298,7 +298,7 @@ class ScannerConfig:
                         # Convert types appropriately
                         if key in [
                             "max_log_size_mb",
-                            "backup_count",
+                            "log_retention_days",
                             "watch_batch_delay",
                             "watch_min_batch",
                             "watch_max_batch",
@@ -486,7 +486,7 @@ class ScannerConfig:
             "seconds_to_wait",
             "max_retries",
             "max_log_size_mb",
-            "backup_count",
+            "log_retention_days",
             "email_smtp_port",
             "email_imap_port",
         ]
@@ -502,7 +502,7 @@ class ScannerConfig:
                         "seconds_to_wait": 10,
                         "max_retries": 120,
                         "max_log_size_mb": 10,
-                        "backup_count": 5,
+                        "log_retention_days": 90,
                         "email_smtp_port": 587,
                         "email_imap_port": 993,
                     }
@@ -576,7 +576,7 @@ class ScannerConfig:
         print(f"  Log level:             {self.log_level}")
         print(f"  Log directory:         {self.log_dir}")
         print(f"  Max log size (MB):     {self.max_log_size_mb}")
-        print(f"  Backup count:          {self.backup_count}")
+        print(f"  Log retention (days):  {self.log_retention_days}")
 
         print("Email Notification:")
         print(f"  Enabled:               {'Yes' if self.email_enabled else 'No'}")

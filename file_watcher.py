@@ -481,6 +481,25 @@ def start_watching(config, url, url_tex="", initial_zip_mgr=None):
             if now - last_check_time >= check_interval:
                 last_check_time = now
                 watcher_thread.watcher._check_batch_ready()
+
+                # End-of-batch: check if today's log file needs rotation
+                from logger_config import (
+                    _swap_file_handler,
+                    rotate_today_log,
+                    _get_today_log_name,
+                )
+
+                today_name = _get_today_log_name(config.log_dir)
+                if today_name:
+                    today_path = config.log_dir / today_name
+                    if today_path.exists():
+                        if (
+                            today_path.stat().st_size
+                            >= config.max_log_size_mb * 1024 * 1024
+                        ):
+                            rotate_today_log(config.log_dir)
+                        _swap_file_handler(config.log_dir)
+
                 pending = watcher_thread.get_pending_count()
                 if pending > 0:
                     logger.info(

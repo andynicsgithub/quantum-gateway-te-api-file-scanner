@@ -166,7 +166,7 @@ def main():
         log_dir=config.log_dir,
         log_level=getattr(logging, config.log_level.upper()),
         max_bytes=config.max_log_size_mb * 1024 * 1024,
-        backup_count=config.backup_count,
+        log_retention_days=config.log_retention_days,
     )
 
     logger.info("TE API Scanner v11.2 - Loading configuration...")
@@ -320,6 +320,12 @@ def main():
                 stream.write("++++++++++\n")
                 stream.write("\n")
                 stream.flush()
+
+        # End-of-run: rotate if over size limit, cleanup old files
+        from logger_config import rotate_today_log, cleanup_old_logs
+
+        rotate_today_log(config.log_dir)
+        cleanup_old_logs(config.log_dir, config.log_retention_days)
 
     return 0
 
@@ -559,7 +565,7 @@ def process_files(
         log_dir=config.log_dir,
         log_level=getattr(logging, config.log_level.upper()),
         max_bytes=config.max_log_size_mb * 1024 * 1024,
-        backup_count=config.backup_count,
+        log_retention_days=config.log_retention_days,
     )
 
     logger = logging.getLogger("te_scanner.main")
