@@ -38,6 +38,9 @@ class ScannerConfig:
     watch_min_batch: int = 0
     watch_max_batch: int = 0
 
+    # Archive file types
+    archive_extensions: set[str] = field(default_factory=set)
+
     # Email notification configuration
     email_enabled: bool = False
     email_smtp_server: str = ""
@@ -210,6 +213,7 @@ class ScannerConfig:
             "tex_clean_files_directory": "tex_clean_files",
             "tex_supported_file_types": set(),
             "tex_scrubbed_parts_codes": set(),
+            "archive_extensions": set(),
         }
 
         # 2. Override with environment variables
@@ -375,6 +379,16 @@ class ScannerConfig:
                 if enabled_parts:
                     config_data["tex_scrubbed_parts_codes"] = enabled_parts
 
+            # Read from ARCHIVE_FILE_TYPES section
+            if "ARCHIVE_FILE_TYPES" in parser:
+                section = parser["ARCHIVE_FILE_TYPES"]
+                enabled_types = set()
+                for ext, value in section.items():
+                    if value.lower() in ["true", "1", "yes", "on"]:
+                        enabled_types.add(ext.lower())
+                if enabled_types:
+                    config_data["archive_extensions"] = enabled_types
+
             # Read from EMAIL section
             if "EMAIL" in parser:
                 section = parser["EMAIL"]
@@ -426,7 +440,6 @@ class ScannerConfig:
                 ("email_use_tls", "email_use_tls"),
                 ("email_skip_tls_verify", "email_skip_tls_verify"),
                 ("email_username", "email_username"),
-                ("email_password", "email_password"),
                 ("email_from", "email_from"),
                 ("email_to", "email_to"),
                 ("email_subject_template", "email_subject_template"),
@@ -436,12 +449,10 @@ class ScannerConfig:
                 ("email_imap_port", "email_imap_port"),
                 ("email_imap_use_ssl", "email_imap_use_ssl"),
                 ("email_imap_username", "email_imap_username"),
-                ("email_imap_password", "email_imap_password"),
                 ("email_imap_folder", "email_imap_folder"),
                 ("zip_archive_directory", "zip_archive_directory"),
                 ("tex_enabled", "tex_enabled"),
                 ("tex_url", "tex_url"),
-                ("tex_api_key", "tex_api_key"),
                 ("tex_response_info_directory", "tex_response_info_directory"),
                 ("tex_clean_files_directory", "tex_clean_files_directory"),
             ]
@@ -575,7 +586,9 @@ class ScannerConfig:
             )
             print(f"  TLS:                   {'Yes' if self.email_use_tls else 'No'}")
             if self.email_use_tls:
-                print(f"  Skip TLS verify:       {'Yes' if self.email_skip_tls_verify else 'No'}")
+                print(
+                    f"  Skip TLS verify:       {'Yes' if self.email_skip_tls_verify else 'No'}"
+                )
             print(f"  From:                  {self.email_from}")
             print(f"  To:                    {self.email_to}")
             if self.email_username:

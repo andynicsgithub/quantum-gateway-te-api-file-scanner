@@ -16,6 +16,30 @@ concurrency = 4
 seconds_to_wait = 10
 max_retries = 120
 
+[ARCHIVE_FILE_TYPES]
+# Defines the list of supported file types that are archives.
+# Archives are processed one-by-one (sequentially) rather than in parallel.
+7z = true
+arj = true
+bz2 = true
+cab = true
+dmg = true
+gz = true
+img = true
+iso = true
+msi = true
+pkg = true
+rar = true
+tar = true
+tbz2 = true
+tbz = true
+tb2 = true
+tgz = true
+xz = true
+zip = true
+udf = true
+qcow2 = true
+
 [WATCHER]
 # Watch mode settings (used when running with --watch flag)
 # Wait time in seconds after last file activity before processing batch. Must be 1 or greater.

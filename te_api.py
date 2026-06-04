@@ -102,7 +102,6 @@ def main():
         help="Skip TLS certificate verification for SMTP server (use with self-signed certs)",
     )
     parser.add_argument("--email-username", help="SMTP authentication username")
-    parser.add_argument("--email-password", help="SMTP authentication password")
     parser.add_argument("--email-from", help="Sender email address")
     parser.add_argument("--email-to", help="Recipient email address")
     parser.add_argument(
@@ -126,7 +125,6 @@ def main():
         "--email-imap-use-ssl", action="store_true", help="Use SSL for IMAP connection"
     )
     parser.add_argument("--email-imap-username", help="IMAP authentication username")
-    parser.add_argument("--email-imap-password", help="IMAP authentication password")
     parser.add_argument(
         "--email-imap-folder", help="IMAP folder to save sent emails (default: Sent)"
     )
@@ -151,7 +149,6 @@ def main():
     parser.add_argument(
         "--tex-url", help="TEX API URL (e.g., https://appliance-ip/UserCheck/TPAPI)"
     )
-    parser.add_argument("--tex-api-key", help="TEX API key")
     parser.add_argument("--tex-response-info-dir", help="TEX response info directory")
     parser.add_argument("--tex-clean-files-dir", help="TEX clean files directory")
     args = parser.parse_args()
@@ -244,7 +241,7 @@ def main():
                 )
 
         # Process any existing files immediately
-        archive_files, other_files = discover_files(config.input_directory)
+        archive_files, other_files = discover_files(config.input_directory, config)
         if archive_files or other_files:
             logger.info(
                 f"Processing {len(archive_files) + len(other_files)} existing files..."
@@ -292,7 +289,7 @@ def main():
                 )
 
         # Discover files
-        archive_files, other_files = discover_files(config.input_directory)
+        archive_files, other_files = discover_files(config.input_directory, config)
 
         logger.info("Begin handling input files by TE")
         logger.info(
@@ -344,41 +341,21 @@ def _file_display_path(file_name, sub_dir):
     return file_name
 
 
-def discover_files(input_directory):
+def discover_files(input_directory, config):
     """
     Discover files in input directory and categorize them as archives or other.
 
     Args:
         input_directory: Path to input directory
+        config: ScannerConfig object with archive_extensions set
 
     Returns:
         Tuple of (archive_files, other_files) as sets of (file_name, sub_dir, full_path) tuples
     """
     logger = logging.getLogger("te_scanner.main")
 
-    # Identify archive vs other files
-    archive_extensions = [
-        ".7z",
-        ".arj",
-        ".bz2",
-        ".cab",
-        ".dmg",
-        ".gz",
-        ".img",
-        ".iso",
-        ".msi",
-        ".pkg",
-        ".rar",
-        ".tar",
-        ".tbz2",
-        ".tbz",
-        ".tb2",
-        ".tgz",
-        ".xz",
-        ".zip",
-        ".udf",
-        ".qcow2",
-    ]
+    # Identify archive vs other files from config
+    archive_extensions = [f".{ext}" for ext in config.archive_extensions]
 
     archive_files = set()
     other_files = set()
