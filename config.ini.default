@@ -1,20 +1,24 @@
 # This is config.ini.default v11.2 (alpha)
 [DEFAULT]
+#Directories - where the files are starting from and which directories they should be moved to when benign or malicious or causing an error etc.
 input_directory = /path/to/source/files
 reports_directory = /path/to/directory/for/report/files
 appliance_ip = 192.168.1.1
 benign_directory = /path/to/directory/for/safe/files
 quarantine_directory = /path/to/quarantine
 error_directory = /path/to/directory/for/files/that/error
-concurrency = 4
-seconds_to_wait = 10
-max_retries = 120
+#Directory to store the archive of the files processed, and the password to be used in the zip file.
 zip_archive_directory = /path/to/directory/for/zip/archives
 zip_password =
+#How many files to process at once.
+concurrency = 4
+#How long to wait between queries to get the verdict. Recommended between 5 and 15. Ensure that seconds_to_wait multiplied by max_retries is 5 minutes or more.
+seconds_to_wait = 10
+max_retries = 120
 
 [WATCHER]
 # Watch mode settings (used when running with --watch flag)
-# Wait time in seconds after last file activity before processing batch
+# Wait time in seconds after last file activity before processing batch. Must be 1 or greater.
 watch_batch_delay = 5
 
 # Minimum files to trigger batch (0 = process immediately after delay)

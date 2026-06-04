@@ -2,79 +2,6 @@
 
 """
 te_api v11.2 (alpha)
-A Python client-side utility for interacting with the Threat Emulation API.
-Features:
-  - Scan input files in a specified directory
-  - Handle TE, TE_EB and TEX (Scrub) processing via the appliance
-  - Store results in an output directory
-  - Support concurrent processing of multiple files (via command line argument or config.ini)
-  - Move files from source directory to benign_directory, quarantine_directory, or error_directory based on TE verdict
-  - Create password-protected zip archives of processed files (configurable)
-  - Cross-platform support (Linux and Windows)
-  - SMB/UNC network path support with retry logic
-  - Watch mode: continuous monitoring of input directory with batch processing
-
-Changes in v10.0 over v9.2:
-  1. Added TEX (Threat Extraction / Scrub) processing alongside TE
-  2. TEX uses /UserCheck/TPAPI endpoint with separate URL and API key
-  3. TEX results written to tex_response_info/ and cleaned files to tex_clean_files/
-  4. TEX config: tex_enabled, tex_url, tex_api_key (config file, CLI, env vars)
-  5. TEX processing is non-blocking — errors do not stop TE flow
-  6. Watch mode and multiprocessing support TEX
-
-Changes in v9.2 over v9.1:
-  1. Added password-protected zip archive creation for processed files
-  2. Zip created concurrently with file moves to verdict directories
-  3. Configurable via config.ini, environment variables, and CLI args
-
-Changes in v11.2 over v11.1:
-     1. Fixed NameError in TEX processing (config → self.config)
-     2. Fixed NameError in TEX error handler (E → e)
-     3. Removed hardcoded SECONDS_TO_WAIT/MAX_RETRIES — now read from config with 15/120 fallback
-     4. Fixed seconds_to_wait default to match config.ini.default (10)
-     5. Renamed --zip_password CLI flag to --zip-password
-     6. Added zip_password to CLI config mappings
-
- Changes in v11.1 over v11.0:
-     1. Added log_path to all log messages to distinguish files with same name in different subdirectories
-     2. Updated "Handling file" log to show sub_dir/file_name format
-
-Changes in v11.0 over v10.0:
-    1. Added configurable email subject and body templates via string.Template
-    2. Added IMAP "Sent" folder saving for sent emails
-    3. Removed email_verbose config option (use ${file_list} placeholder in template instead)
-    4. Template file defaults to data/email_template.txt with sensible defaults
-
-Changes in v9.1 over v9.0:
-   1. Email notifications now also sent in one-shot mode
-   2. process_files() returns verdict info for aggregation
-
-Changes in v9.0 over v8.00:
-  1. Added SMTP email notifications on batch completion in watch mode
-  2. Configurable mail server, credentials, and recipient addresses
-  3. Email reports include batch summary with malicious file details
-
-Changes in v8.00 over v7.01:
-  1. Added --watch mode for continuous file monitoring
-  2. Added CopyCompletionWatcher for robust copy detection (waits for file handles to close)
-  3. Added Windows Service and Linux systemd support
-  4. Batch processing with configurable delay and size limits
-  5. Recursive subdirectory monitoring
-
-Changes in v7.01 over v7.0:
-  1. Added logging functionality with multiple logging levels
-  2. Improved error handling
-  3. Fixes to Windows multiprocessing issues
-
-Changes in v7.0 over v6.3:
-  1. Complete refactoring for cross-platform support (Windows and Linux)
-  2. Added PathHandler for robust file operations across filesystems and network paths
-  3. Replaced os.rename() with shutil.move() + retry logic for Windows and SMB compatibility
-  4. Added ConfigManager for type-safe configuration with validation
-  5. Support for Windows UNC paths (\\\\server\\share) and Linux SMB mounts
-  6. Added checksum verification for files moved over network paths
-  7. Improved error handling with platform-specific guidance
-  8. Foundation for watch mode (Phase 2)
 """
 
 from te_file_handler import TE
@@ -96,6 +23,7 @@ from datetime import datetime
 # Main entry point
 # =======================
 
+
 def main():
     """
     MAIN ENTRY POINT
@@ -109,75 +37,141 @@ def main():
     # =======================
     # Parse CLI Arguments
     # =======================
-    
+
     parser = argparse.ArgumentParser(
-        description='TE API Scanner - Cross-platform threat emulation file scanner'
+        description="TE API Scanner - Cross-platform threat emulation file scanner"
     )
-    parser.add_argument("-in", "--input_directory", help="the input files folder to be scanned by TE")
-    parser.add_argument("-rep", "--reports_directory", help="the output folder with TE results")
+    parser.add_argument(
+        "-in", "--input_directory", help="the input files folder to be scanned by TE"
+    )
+    parser.add_argument(
+        "-rep", "--reports_directory", help="the output folder with TE results"
+    )
     parser.add_argument("-ip", "--appliance_ip", help="the appliance ip address")
-    parser.add_argument('-n', '--concurrency', type=int, help='Number of concurrent file processes')
-    parser.add_argument('-out', '--benign_directory', help='the directory to move Benign files after scanning')
-    parser.add_argument('-jail', '--quarantine_directory', help='the directory to move Malicious files after scanning')
-    parser.add_argument('-error', '--error_directory', help='the directory to move files which cause a scanning error')
-    parser.add_argument('--watch', action='store_true', help='Watch mode: monitor directory for new files continuously')
-    parser.add_argument('--watch-delay', type=int, help='Seconds to wait after last file activity before processing batch (default: from config)')
-    parser.add_argument('--watch-min', type=int, help='Minimum files to trigger batch (0 = from config)')
-    parser.add_argument('--watch-max', type=int, help='Maximum batch size (0 = unlimited, from config)')
-    
+    parser.add_argument(
+        "-n", "--concurrency", type=int, help="Number of concurrent file processes"
+    )
+    parser.add_argument(
+        "-out",
+        "--benign_directory",
+        help="the directory to move Benign files after scanning",
+    )
+    parser.add_argument(
+        "-jail",
+        "--quarantine_directory",
+        help="the directory to move Malicious files after scanning",
+    )
+    parser.add_argument(
+        "-error",
+        "--error_directory",
+        help="the directory to move files which cause a scanning error",
+    )
+    parser.add_argument(
+        "--watch",
+        action="store_true",
+        help="Watch mode: monitor directory for new files continuously",
+    )
+    parser.add_argument(
+        "--watch-delay",
+        type=int,
+        help="Seconds to wait after last file activity before processing batch (default: from config)",
+    )
+    parser.add_argument(
+        "--watch-min", type=int, help="Minimum files to trigger batch (0 = from config)"
+    )
+    parser.add_argument(
+        "--watch-max", type=int, help="Maximum batch size (0 = unlimited, from config)"
+    )
+
     # Email notification CLI args
-    parser.add_argument('--email-enabled', action='store_true', help='Enable email notifications on batch completion')
-    parser.add_argument('--email-smtp-server', help='SMTP server hostname or IP')
-    parser.add_argument('--email-smtp-port', type=int, help='SMTP server port (default: 587)')
-    parser.add_argument('--email-use-tls', action='store_true', help='Use TLS for SMTP connection')
-    parser.add_argument('--email-username', help='SMTP authentication username')
-    parser.add_argument('--email-password', help='SMTP authentication password')
-    parser.add_argument('--email-from', help='Sender email address')
-    parser.add_argument('--email-to', help='Recipient email address')
-    parser.add_argument('--email-subject-template', help='Email subject template (supports ${timestamp}, ${appliance_ip}, ${processed}, ${malicious})')
-    parser.add_argument('--email-template-file', help='Path to email body template file')
+    parser.add_argument(
+        "--email-enabled",
+        action="store_true",
+        help="Enable email notifications on batch completion",
+    )
+    parser.add_argument("--email-smtp-server", help="SMTP server hostname or IP")
+    parser.add_argument(
+        "--email-smtp-port", type=int, help="SMTP server port (default: 587)"
+    )
+    parser.add_argument(
+        "--email-use-tls", action="store_true", help="Use TLS for SMTP connection"
+    )
+    parser.add_argument("--email-username", help="SMTP authentication username")
+    parser.add_argument("--email-password", help="SMTP authentication password")
+    parser.add_argument("--email-from", help="Sender email address")
+    parser.add_argument("--email-to", help="Recipient email address")
+    parser.add_argument(
+        "--email-subject-template",
+        help="Email subject template (supports ${timestamp}, ${appliance_ip}, ${processed}, ${malicious})",
+    )
+    parser.add_argument(
+        "--email-template-file", help="Path to email body template file"
+    )
     # IMAP "Sent" folder CLI args
-    parser.add_argument('--email-imap-enabled', action='store_true', help='Enable saving sent emails to IMAP "Sent" folder')
-    parser.add_argument('--email-imap-server', help='IMAP server hostname or IP')
-    parser.add_argument('--email-imap-port', type=int, help='IMAP server port (default: 993)')
-    parser.add_argument('--email-imap-use-ssl', action='store_true', help='Use SSL for IMAP connection')
-    parser.add_argument('--email-imap-username', help='IMAP authentication username')
-    parser.add_argument('--email-imap-password', help='IMAP authentication password')
-    parser.add_argument('--email-imap-folder', help='IMAP folder to save sent emails (default: Sent)')
-    
+    parser.add_argument(
+        "--email-imap-enabled",
+        action="store_true",
+        help='Enable saving sent emails to IMAP "Sent" folder',
+    )
+    parser.add_argument("--email-imap-server", help="IMAP server hostname or IP")
+    parser.add_argument(
+        "--email-imap-port", type=int, help="IMAP server port (default: 993)"
+    )
+    parser.add_argument(
+        "--email-imap-use-ssl", action="store_true", help="Use SSL for IMAP connection"
+    )
+    parser.add_argument("--email-imap-username", help="IMAP authentication username")
+    parser.add_argument("--email-imap-password", help="IMAP authentication password")
+    parser.add_argument(
+        "--email-imap-folder", help="IMAP folder to save sent emails (default: Sent)"
+    )
+
     # Zip archive CLI args
-    parser.add_argument('-za', '--zip_archive_directory', help='Directory to store password-protected zip archives of processed files')
-    parser.add_argument('--zip-password', help='Password for zip archives (empty or not provided = no zip archive)')
-    
+    parser.add_argument(
+        "-za",
+        "--zip_archive_directory",
+        help="Directory to store password-protected zip archives of processed files",
+    )
+    parser.add_argument(
+        "--zip-password",
+        help="Password for zip archives (empty or not provided = no zip archive)",
+    )
+
     # TEX (Scrub) CLI args
-    parser.add_argument('--tex-enabled', action='store_true', help='Enable TEX (Threat Extraction/Scrub) processing')
-    parser.add_argument('--tex-url', help='TEX API URL (e.g., https://appliance-ip/UserCheck/TPAPI)')
-    parser.add_argument('--tex-api-key', help='TEX API key')
-    parser.add_argument('--tex-response-info-dir', help='TEX response info directory')
-    parser.add_argument('--tex-clean-files-dir', help='TEX clean files directory')
+    parser.add_argument(
+        "--tex-enabled",
+        action="store_true",
+        help="Enable TEX (Threat Extraction/Scrub) processing",
+    )
+    parser.add_argument(
+        "--tex-url", help="TEX API URL (e.g., https://appliance-ip/UserCheck/TPAPI)"
+    )
+    parser.add_argument("--tex-api-key", help="TEX API key")
+    parser.add_argument("--tex-response-info-dir", help="TEX response info directory")
+    parser.add_argument("--tex-clean-files-dir", help="TEX clean files directory")
     args = parser.parse_args()
-    
+
     # =======================
     # Load and Validate Config
     # =======================
-    
+
     # Initialize logging first so we can log configuration loading
     # We'll get basic config without logging first to know where to put logs
-    config = ScannerConfig.from_sources(config_file='config.ini', cli_args=args)
-    
+    config = ScannerConfig.from_sources(config_file="config.ini", cli_args=args)
+
     # Now setup logging with loaded configuration
     logger = setup_logging(
         log_dir=config.log_dir,
         log_level=getattr(logging, config.log_level.upper()),
         max_bytes=config.max_log_size_mb * 1024 * 1024,
-        backup_count=config.backup_count
+        backup_count=config.backup_count,
     )
-    
+
     logger.info("TE API Scanner v11.2 - Loading configuration...")
-    
+
     # Display configuration summary
     config.print_summary()
-    
+
     # Validate configuration
     is_valid, errors = config.validate()
     if not is_valid:
@@ -186,63 +180,73 @@ def main():
             logger.error(f"  ERROR: {error}")
         parser.print_help()
         return 1
-    
+
     logger.info("Configuration validated successfully")
-    
+
     # Build API URLs
     url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/"
-    
+
     url_tex = config.tex_url
-    
+
     # Warn about Windows long path support if applicable
     if PathHandler.is_windows() and not PathHandler.supports_long_paths():
         logger.warning("Windows long path support is not enabled.")
         logger.warning("         Paths over 260 characters may fail.")
-        logger.warning("         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation")
-    
+        logger.warning(
+            "         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation"
+        )
+
     # =======================
     # Watch Mode vs One-Shot Mode
     # =======================
-    
+
     if config.watch_mode:
         # Check for required dependencies
         if PathHandler.is_windows():
             try:
-                import win32serviceutil
+                import win32serviceutil  # noqa: F401  # availability check
             except ImportError:
                 logger.error("ERROR: pywin32 is not installed.")
                 logger.error("Run: pip install pywin32")
                 logger.error("Or: pip install -r requirements.txt")
                 return 1
-        
+
         try:
-            import watchdog.observers
+            import watchdog.observers  # noqa: F401  # availability check
         except ImportError:
             logger.error("ERROR: watchdog is not installed.")
             logger.error("Run: pip install watchdog")
             logger.error("Or: pip install -r requirements.txt")
             return 1
-        
+
         # Watch mode: process existing files, then monitor
         logger.info("Starting in WATCH mode")
         logger.info("Dependencies check passed.")
-        
+
         # Prepare zip archive if password is configured
         zip_mgr = None
         zip_timestamp = None
         if config.zip_password:
-            zip_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            zip_mgr = ZipArchiveManager.create_archive(config.zip_archive_directory, config.zip_password, zip_timestamp)
+            zip_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            zip_mgr = ZipArchiveManager.create_archive(
+                config.zip_archive_directory, config.zip_password, zip_timestamp
+            )
             if zip_mgr:
                 logger.info(f"Zip archive enabled: {zip_mgr.zip_path}")
             else:
-                logger.warning("Failed to initialize zip archive, proceeding without it")
-        
+                logger.warning(
+                    "Failed to initialize zip archive, proceeding without it"
+                )
+
         # Process any existing files immediately
         archive_files, other_files = discover_files(config.input_directory)
         if archive_files or other_files:
-            logger.info(f"Processing {len(archive_files) + len(other_files)} existing files...")
-            process_discovered_files(archive_files, other_files, config, url, url_tex, zip_mgr)
+            logger.info(
+                f"Processing {len(archive_files) + len(other_files)} existing files..."
+            )
+            process_discovered_files(
+                archive_files, other_files, config, url, url_tex, zip_mgr
+            )
             find_and_delete_empty_subdirectories(config.input_directory)
             if zip_mgr:
                 zip_mgr.close()
@@ -250,61 +254,71 @@ def main():
             logger.info("No existing files to process.")
             if zip_mgr:
                 zip_mgr.abort()
-        
+
         # Start watching (blocking call)
         from file_watcher import start_watching
+
         try:
             start_watching(config, url, url_tex, zip_mgr)
         except Exception as e:
             logger.error(f"ERROR starting watcher: {e}")
             import traceback
+
             logger.error(traceback.format_exc())
             return 1
-        
+
     else:
         # One-shot mode: process and exit
         logger.info("Starting in ONE-SHOT mode")
         logger.info(f"Parallel processing of {config.concurrency} files at once")
-        
+
         # Prepare zip archive if password is configured
         zip_mgr = None
         if config.zip_password:
-            zip_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
-            zip_mgr = ZipArchiveManager.create_archive(config.zip_archive_directory, config.zip_password, zip_timestamp)
+            zip_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+            zip_mgr = ZipArchiveManager.create_archive(
+                config.zip_archive_directory, config.zip_password, zip_timestamp
+            )
             if zip_mgr:
                 logger.info(f"Zip archive enabled: {zip_mgr.zip_path}")
             else:
-                logger.warning("Failed to initialize zip archive, proceeding without it")
-        
+                logger.warning(
+                    "Failed to initialize zip archive, proceeding without it"
+                )
+
         # Discover files
         archive_files, other_files = discover_files(config.input_directory)
-        
-        logger.info(f"Begin handling input files by TE")
-        logger.info(f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files")
-        
+
+        logger.info("Begin handling input files by TE")
+        logger.info(
+            f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files"
+        )
+
         if len(other_files) == 0 and len(archive_files) == 0:
             logger.info("No files to process. Exiting.")
             if zip_mgr:
                 zip_mgr.abort()
             return 0
-        
+
         # Process files
-        process_discovered_files(archive_files, other_files, config, url, url_tex, zip_mgr)
+        process_discovered_files(
+            archive_files, other_files, config, url, url_tex, zip_mgr
+        )
         find_and_delete_empty_subdirectories(config.input_directory)
-        
+
         if zip_mgr:
             zip_mgr.close()
-        
+
         logger.info("Processing complete!")
         # Write separator directly to handlers (without timestamps)
         for handler in logger.handlers:
-            if hasattr(handler, 'stream') and handler.stream:
+            if hasattr(handler, "stream") and handler.stream:
                 stream = handler.stream
                 stream.write("\n")
                 stream.write("++++++++++\n")
                 stream.write("\n")
                 stream.flush()
-    
+
     return 0
 
 
@@ -312,31 +326,54 @@ def main():
 # Utility Functions
 # =======================
 
+
 def _file_display_path(file_name, sub_dir):
     """
     Return a display-friendly path for logging purposes.
-    
+
     Returns 'sub_dir/file_name' if sub_dir is non-empty and not '.',
     otherwise just 'file_name'.
     """
-    if sub_dir and sub_dir != '.':
+    if sub_dir and sub_dir != ".":
         return f"{sub_dir}/{file_name}"
     return file_name
+
 
 def discover_files(input_directory):
     """
     Discover files in input directory and categorize them as archives or other.
-    
+
     Args:
         input_directory: Path to input directory
-        
+
     Returns:
         Tuple of (archive_files, other_files) as sets of (file_name, sub_dir, full_path) tuples
     """
-    logger = logging.getLogger('te_scanner.main')
-    
+    logger = logging.getLogger("te_scanner.main")
+
     # Identify archive vs other files
-    archive_extensions = [".7z", ".arj", ".bz2", ".cab", ".dmg", ".gz", ".img", ".iso", ".msi", ".pkg", ".rar", ".tar", ".tbz2", ".tbz", ".tb2", ".tgz", ".xz", ".zip", ".udf", ".qcow2"]
+    archive_extensions = [
+        ".7z",
+        ".arj",
+        ".bz2",
+        ".cab",
+        ".dmg",
+        ".gz",
+        ".img",
+        ".iso",
+        ".msi",
+        ".pkg",
+        ".rar",
+        ".tar",
+        ".tbz2",
+        ".tbz",
+        ".tb2",
+        ".tgz",
+        ".xz",
+        ".zip",
+        ".udf",
+        ".qcow2",
+    ]
 
     archive_files = set()
     other_files = set()
@@ -363,18 +400,21 @@ def discover_files(input_directory):
                 archive_files.add(file_info)
             else:
                 other_files.add(file_info)
-    
+
     return archive_files, other_files
 
-def process_discovered_files(archive_files, other_files, config, url, url_tex='', zip_mgr=None):
+
+def process_discovered_files(
+    archive_files, other_files, config, url, url_tex="", zip_mgr=None
+):
     """
     Process discovered files using the existing processing logic.
-    
+
     In multiprocessing mode, non-archive files are copied to a temp directory by
     workers, then consolidated into the zip by the main process.
     Archive files are processed sequentially in the main process and added directly
     to the zip.
-    
+
     Args:
         archive_files: Set of (file_name, sub_dir, full_path) tuples
         other_files: Set of (file_name, sub_dir, full_path) tuples
@@ -384,22 +424,25 @@ def process_discovered_files(archive_files, other_files, config, url, url_tex=''
         zip_mgr: ZipArchiveManager instance (None if disabled)
     """
     from notification import send_batch_notification
-    
-    logger = logging.getLogger('te_scanner.main')
-    
+
+    logger = logging.getLogger("te_scanner.main")
+
     # Collect results for email notification
     all_files = []
-    
+
     # Build temp directory and zip config for multiprocessing workers
     zip_config = None
     temp_dir = None
     verdict_basenames = [
         config.benign_directory.name,
         config.quarantine_directory.name,
-        config.error_directory.name
+        config.error_directory.name,
     ]
     if zip_mgr:
-        temp_dir = str(Path(config.zip_archive_directory) / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}")
+        temp_dir = str(
+            Path(config.zip_archive_directory)
+            / f"te_zip_{datetime.now().strftime('%Y%m%d%H%M%S_%f')}"
+        )
         os.makedirs(temp_dir, exist_ok=True)
         logger.info(f"Zip temp directory: {temp_dir}")
         zip_config = (
@@ -408,14 +451,22 @@ def process_discovered_files(archive_files, other_files, config, url, url_tex=''
             verdict_basenames[0],
             verdict_basenames[1],
             verdict_basenames[2],
-            temp_dir
+            temp_dir,
         )
-    
+
     # Non-archive files: parallel processing (workers copy to temp dir)
     if len(other_files) > 0:
-        logger.info(f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}")
-        process_func = partial(process_files, config=config, url=url, url_tex=url_tex, zip_config=zip_config)
-        
+        logger.info(
+            f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}"
+        )
+        process_func = partial(
+            process_files,
+            config=config,
+            url=url,
+            url_tex=url_tex,
+            zip_config=zip_config,
+        )
+
         with multiprocessing.Pool(config.concurrency) as pool:
             results = pool.starmap(process_func, other_files)
             all_files.extend(results)
@@ -425,49 +476,64 @@ def process_discovered_files(archive_files, other_files, config, url, url_tex=''
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, safe_file_name, sub_dir, full_path = file_info
-            result = process_files(file_name, safe_file_name, sub_dir, full_path, config, url, url_tex, zip_config=zip_mgr)
+            result = process_files(
+                file_name,
+                safe_file_name,
+                sub_dir,
+                full_path,
+                config,
+                url,
+                url_tex,
+                zip_config=zip_mgr,
+            )
             all_files.append(result)
-    
+
     # Consolidate temp directory files into the zip (multiprocessing mode)
     if zip_mgr and temp_dir:
         try:
             zip_mgr.consolidate(temp_dir, verdict_basenames, config.zip_password)
         except Exception as e:
             logger.error(f"Failed to consolidate temp files into zip: {e}")
-    
+
     # Cleanup temp directory
     if temp_dir and os.path.exists(temp_dir):
         try:
             shutil.rmtree(temp_dir)
         except Exception as e:
             logger.warning(f"Failed to clean up temp directory {temp_dir}: {e}")
-    
+
     # Send email notification if enabled
     if config.email_enabled:
         batch_summary = {
-            'processed': len(all_files),
-            'benign': sum(1 for f in all_files if f.get('verdict') == 'Benign'),
-            'malicious': sum(1 for f in all_files if f.get('verdict') == 'Malicious'),
-            'error': sum(1 for f in all_files if f.get('status') == 'error' or f.get('verdict') == 'Error'),
-            'malicious_files': [
-                {'name': f['name'], 'verdict': f['verdict']}
-                for f in all_files if f.get('verdict') == 'Malicious'
+            "processed": len(all_files),
+            "benign": sum(1 for f in all_files if f.get("verdict") == "Benign"),
+            "malicious": sum(1 for f in all_files if f.get("verdict") == "Malicious"),
+            "error": sum(
+                1
+                for f in all_files
+                if f.get("status") == "error" or f.get("verdict") == "Error"
+            ),
+            "malicious_files": [
+                {"name": f["name"], "verdict": f["verdict"]}
+                for f in all_files
+                if f.get("verdict") == "Malicious"
             ],
-            'all_files': all_files,
+            "all_files": all_files,
         }
         try:
             send_batch_notification(config, batch_summary)
         except Exception as e:
             logger.warning(f"Email notification failed: {e}")
 
+
 def find_and_delete_empty_subdirectories(input_directory):
     """
     Finds and deletes all empty subdirectories under the specified input_directory.
-    
+
     Args:
         input_directory (str): The root directory to start the search.
     """
-    logger = logging.getLogger('te_scanner.main')
+    logger = logging.getLogger("te_scanner.main")
     for root, dirs, files in os.walk(input_directory, topdown=False):
         # Iterate in reverse order to avoid issues with modifying the list while iterating
         for dir_name in dirs:
@@ -479,10 +545,20 @@ def find_and_delete_empty_subdirectories(input_directory):
                 except Exception as e:
                     logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
 
-def process_files(file_name, safe_file_name, sub_dir, full_path, config, url, url_tex='', zip_config=None):
+
+def process_files(
+    file_name,
+    safe_file_name,
+    sub_dir,
+    full_path,
+    config,
+    url,
+    url_tex="",
+    zip_config=None,
+):
     """
     Process a single file through the TE API.
-    
+
     Args:
         file_name: Real name of the file (used for local filesystem ops, logging)
         safe_file_name: UTF-8-safe name (used for API calls)
@@ -492,7 +568,7 @@ def process_files(file_name, safe_file_name, sub_dir, full_path, config, url, ur
         url: TE API URL
         url_tex: TEX API URL (may be empty if TEX disabled)
         zip_config: Tuple of (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
-        
+
     Returns:
         dict with keys: 'name', 'path', 'verdict', 'status'
     """
@@ -501,45 +577,57 @@ def process_files(file_name, safe_file_name, sub_dir, full_path, config, url, ur
         log_dir=config.log_dir,
         log_level=getattr(logging, config.log_level.upper()),
         max_bytes=config.max_log_size_mb * 1024 * 1024,
-        backup_count=config.backup_count
+        backup_count=config.backup_count,
     )
-    
-    logger = logging.getLogger('te_scanner.main')
-    result = {'name': file_name, 'path': sub_dir if sub_dir else '', 'verdict': 'Unknown', 'status': 'error'}
+
+    logger = logging.getLogger("te_scanner.main")
+    result = {
+        "name": file_name,
+        "path": sub_dir if sub_dir else "",
+        "verdict": "Unknown",
+        "status": "error",
+    }
     try:
-        logger.info(f"Handling file: {_file_display_path(file_name, sub_dir)} (zip_config type={type(zip_config).__name__})")
+        logger.info(
+            f"Handling file: {_file_display_path(file_name, sub_dir)} (zip_config type={type(zip_config).__name__})"
+        )
         te = TE(
-            url, 
+            url,
             url_tex,
-            file_name, 
-            safe_file_name, 
-            sub_dir, 
-            full_path, 
+            file_name,
+            safe_file_name,
+            sub_dir,
+            full_path,
             config.input_directory,
-            config.reports_directory, 
-            config.benign_directory, 
-            config.quarantine_directory, 
+            config.reports_directory,
+            config.benign_directory,
+            config.quarantine_directory,
             config.error_directory,
             tex_api_key=config.tex_api_key,
             zip_config=zip_config,
-            config=config
+            config=config,
         )
         te.handle_file()
-        
-        result['tex_status'] = te._tex_status
-        
+
+        result["tex_status"] = te._tex_status
+
         if te.final_status_label == "FOUND":
             verdict = te.parse_verdict(te.final_response, "te")
-            result['verdict'] = verdict
-            result['status'] = 'success'
+            result["verdict"] = verdict
+            result["status"] = "success"
         else:
-            result['verdict'] = te.final_status_label if te.final_status_label else 'Not_Found'
-            result['status'] = 'success'
+            result["verdict"] = (
+                te.final_status_label if te.final_status_label else "Not_Found"
+            )
+            result["status"] = "success"
     except Exception as E:
-        logger.error(f"Could not handle file: {_file_display_path(file_name, sub_dir)} because: {E}. Continue to handle the next file.")
-        result['status'] = 'error'
-    
+        logger.error(
+            f"Could not handle file: {_file_display_path(file_name, sub_dir)} because: {E}. Continue to handle the next file."
+        )
+        result["status"] = "error"
+
     return result
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     exit(main())

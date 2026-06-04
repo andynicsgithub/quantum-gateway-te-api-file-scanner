@@ -18,6 +18,7 @@ from enum import Enum
 
 # ~~~~~~~~~ TEX statuses ~~~~~~~~~ #
 
+
 class CpExtractResult(Enum):
     CP_EXTRACT_RESULT_CANCEL_SCRUBBING = -1
     CP_EXTRACT_RESULT_SUCCESS = 0
@@ -51,19 +52,25 @@ def return_relevant_enum(status):
 class TEX(object):
     """
     Parses and processes TEX (Scrub) results from a file upload response.
-    
+
     After a file is uploaded with TEX enabled, the upload response contains
     scrub results. This class:
     1. Extracts the scrub response and writes it to tex_response_info/
     2. If TEX successfully cleaned the file, creates the cleaned file in
        tex_clean_files/ with a .cleaned filename pattern
-    
+
     Usage:
         tex = TEX(file_name, tex_response_info_dir, tex_clean_files_dir, log_path=None)
         tex.process_results(upload_response)
     """
-    
-    def __init__(self, file_name, output_folder_tex_response_info, output_folder_tex_clean_files, log_path=None):
+
+    def __init__(
+        self,
+        file_name,
+        output_folder_tex_response_info,
+        output_folder_tex_clean_files,
+        log_path=None,
+    ):
         self.file_name = file_name
         self.log_path = log_path if log_path else file_name
         self.output_folder_tex_response_info = Path(output_folder_tex_response_info)
@@ -71,38 +78,38 @@ class TEX(object):
         self.clean_file_data = ""
         self.clean_file_name = ""
         self.scrub_result = -1
-        self.logger = logging.getLogger('te_scanner.tex')
-    
+        self.logger = logging.getLogger("te_scanner.tex")
+
     def _fallback_filename(self):
         """
         Build cleaned filename by inserting .cleaned before the original extension.
         """
-        match = re.match(r'^(.+?)(\.[^.]+)?$', self.file_name)
+        match = re.match(r"^(.+?)(\.[^.]+)?$", self.file_name)
         if match:
             base = match.group(1)
             old_ext = match.group(2) or ""
             self.clean_file_name = f"{base}.cleaned{old_ext}"
         else:
             self.clean_file_name = f"{self.file_name}.cleaned"
-    
+
     def create_clean_file(self, response=None):
         """
         Decode the cleaned file content received as base64 in the response and
         write it to a new file in tex_clean_files/.
-        
+
         If output_file_name is provided in the scrub response, use it directly
         as the cleaned filename. Otherwise, fall back to inserting .cleaned
         before the original extension.
-        
+
         Examples:
             "document.pdf" -> "document.cleaned.pdf"
             "macro.docm" with output_file_name="macro.cleaned.docx" -> "macro.cleaned.docx"
-        
+
         Returns:
             Path to the created cleaned file
         """
         text = base64.b64decode(self.clean_file_data)
-        
+
         # Try to get the full cleaned filename from the API response first
         if response is not None:
             scrub = response["response"][0]["scrub"]
@@ -113,25 +120,25 @@ class TEX(object):
                 self._fallback_filename()
         else:
             self._fallback_filename()
-        
+
         output_path = self.output_folder_tex_clean_files / self.clean_file_name
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'wb') as file:
+
+        with open(output_path, "wb") as file:
             file.write(text)
-        
+
         return output_path
-    
+
     def process_results(self, response):
         """
         Process TEX results from an upload response.
-        
+
         1. Creates TEX response info file in tex_response_info/
         2. If TEX cleaned the file, creates the cleaned file in tex_clean_files/
-        
+
         Args:
             response: The full upload response dict containing scrub results
-            
+
         Returns:
             bool: True if TEX cleaned the file, False otherwise
         """
@@ -140,21 +147,27 @@ class TEX(object):
             if is_cleaned:
                 cleaned_file_path = self.create_clean_file(response)
                 self.logger.info(f"TEX cleaned file: {cleaned_file_path}")
-                self.logger.info(f"TEX extract result: {return_relevant_enum(self.scrub_result)}")
+                self.logger.info(
+                    f"TEX extract result: {return_relevant_enum(self.scrub_result)}"
+                )
             else:
-                self.logger.info(f"TEX extract result: {return_relevant_enum(self.scrub_result)}")
+                self.logger.info(
+                    f"TEX extract result: {return_relevant_enum(self.scrub_result)}"
+                )
             return is_cleaned
         except Exception as e:
-            self.logger.error(f"Processing TEX results failed for {self.log_path}: {e}", exc_info=True)
+            self.logger.error(
+                f"Processing TEX results failed for {self.log_path}: {e}", exc_info=True
+            )
             raise
-    
+
     def _create_response_info(self, response):
         """
         Extract scrub response from the upload response and write it to a file.
-        
+
         Args:
             response: Full upload response dict
-            
+
         Returns:
             bool: True if the file was cleaned, False otherwise
         """
@@ -163,31 +176,35 @@ class TEX(object):
         except (KeyError, IndexError) as E:
             self.logger.error(f"No scrub data in response for {self.log_path}: {E}")
             return False
-        
+
         # Check if file was cleaned (empty file_enc_data means not cleaned)
         is_cleaned = scrub_response.get("file_enc_data", "") != ""
-        
+
         # Save scrub result code for logging
         self.scrub_result = scrub_response.get("scrub_result", -1)
-        
+
         # Store clean file data before potentially removing it from the response
         self.clean_file_data = scrub_response.get("file_enc_data", "")
-        
+
         # Build response filename
         response_filename = f"{self.file_name}.response.txt"
         output_path = self.output_folder_tex_response_info / response_filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Remove clean file data from response to save space in response file
         if is_cleaned:
             scrub_response_copy = copy.deepcopy(scrub_response)
-            scrub_response_copy["file_enc_data"] = "[removed - already used for cleaned file]"
+            scrub_response_copy["file_enc_data"] = (
+                "[removed - already used for cleaned file]"
+            )
         else:
             scrub_response_copy = scrub_response
-        
-        self.logger.info(f"TEX Upload response: {json.dumps(scrub_response_copy, indent=2)}")
-        
-        with open(output_path, 'w') as file:
+
+        self.logger.info(
+            f"TEX Upload response: {json.dumps(scrub_response_copy, indent=2)}"
+        )
+
+        with open(output_path, "w") as file:
             file.write(json.dumps(scrub_response_copy, indent=2))
-        
+
         return is_cleaned

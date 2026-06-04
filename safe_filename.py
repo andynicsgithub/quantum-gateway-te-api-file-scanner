@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-safe_filename.py
+safe_filename.py v11.2 (alpha)
 Utilities for generating ASCII-only pseudonyms from filenames.
 
 The TE API server only accepts filenames composed of ASCII characters.
@@ -48,13 +48,13 @@ def sanitize_filename(filename: str, seen: dict) -> str:
     # ------------------------------------------------------------------
     # 1. Extract extension before any transformation
     # ------------------------------------------------------------------
-    last_dot = filename.rfind('.')
+    last_dot = filename.rfind(".")
     if last_dot > 0:
         base = filename[:last_dot]
         ext = filename[last_dot:]  # includes the dot
     else:
         base = filename
-        ext = ''
+        ext = ""
 
     # ------------------------------------------------------------------
     # 2. Convert base to ASCII-only by replacing every non-ASCII char
@@ -63,17 +63,21 @@ def sanitize_filename(filename: str, seen: dict) -> str:
     # for bytes that can't decode as any Unicode character.  Encode back
     # to raw bytes first, then decode as ASCII with 'replace'.  Python's
     # 'replace' produces U+FFFD (�), so replace that with '_'.
-    raw_base_bytes = base.encode('utf-8', errors='surrogateescape')
-    cleaned_base = raw_base_bytes.decode('ascii', errors='replace').replace('\ufffd', '_')
+    raw_base_bytes = base.encode("utf-8", errors="surrogateescape")
+    cleaned_base = raw_base_bytes.decode("ascii", errors="replace").replace(
+        "\ufffd", "_"
+    )
 
     # If base was entirely non-ASCII it may now be all underscores.
     # Treat a name consisting only of '_' as "empty".
-    stripped = cleaned_base.strip('_')
+    stripped = cleaned_base.strip("_")
 
     # ------------------------------------------------------------------
     # 3. Compute SHA-256 of the original filename bytes
     # ------------------------------------------------------------------
-    hash_hex = hashlib.sha256(filename.encode('utf-8', errors='surrogateescape')).hexdigest()
+    hash_hex = hashlib.sha256(
+        filename.encode("utf-8", errors="surrogateescape")
+    ).hexdigest()
 
     # ------------------------------------------------------------------
     # 4. Build candidate and check for collisions / emptiness
