@@ -336,13 +336,7 @@ def _save_to_imap(config, body, subject):
 
     try:
         if imap_use_ssl:
-            if getattr(config, "email_imap_skip_tls_verify", False):
-                ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                ssl_ctx.check_hostname = False
-                ssl_ctx.verify_mode = ssl.CERT_NONE
-                imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port, context=ssl_ctx, timeout=30)
-            else:
-                imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port, timeout=30)
+            imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port, timeout=30)
         else:
             imap_conn = imaplib.IMAP4(imap_server, imap_port, timeout=30)
 
