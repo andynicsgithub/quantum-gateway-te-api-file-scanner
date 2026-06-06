@@ -371,6 +371,8 @@ class ScannerConfig:
                 section = parser["TEX_SUPPORTED_FILE_TYPES"]
                 enabled_types = set()
                 for ext, value in section.items():
+                    if ext in parser.defaults():
+                        continue
                     if value.lower() in ["true", "1", "yes", "on"]:
                         enabled_types.add(ext.lower())
                 if enabled_types:
@@ -381,6 +383,8 @@ class ScannerConfig:
                 section = parser["TEX_SCRUBBED_PARTS"]
                 enabled_parts = set()
                 for code, value in section.items():
+                    if code in parser.defaults():
+                        continue
                     val = value.split("#")[0].strip().lower()
                     if val in ["true", "1", "yes", "on"]:
                         enabled_parts.add(int(code))
@@ -392,6 +396,8 @@ class ScannerConfig:
                 section = parser["ARCHIVE_FILE_TYPES"]
                 enabled_types = set()
                 for ext, value in section.items():
+                    if ext in parser.defaults():
+                        continue
                     if value.lower() in ["true", "1", "yes", "on"]:
                         enabled_types.add(ext.lower())
                 if enabled_types:
