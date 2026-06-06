@@ -83,7 +83,6 @@ def main():
         "--appliance-skip-tls-verify",
         action="store_true",
         default=None,
-        const=True,
         help="Skip TLS certificate verification for TE appliance (default: false, enable for self-signed certs)",
     )
     parser.add_argument(
