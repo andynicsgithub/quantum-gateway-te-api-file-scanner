@@ -54,26 +54,27 @@ def send_batch_notification(config, summary):
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
 
-        # Send via SMTP
+       # Send via SMTP
         logger.debug(
             f"Connecting to SMTP server {config.email_smtp_server}:{config.email_smtp_port}"
         )
-        server = smtplib.SMTP(config.email_smtp_server, config.email_smtp_port)
-        server.ehlo()
-
-        if config.email_use_tls:
-            if getattr(config, "email_skip_tls_verify", False):
-                ssl_ctx = ssl._create_unverified_context()
-            else:
-                ssl_ctx = ssl.create_default_context()
-            server.starttls(context=ssl_ctx)
+        with smtplib.SMTP(config.email_smtp_server, config.email_smtp_port, timeout=30) as server:
             server.ehlo()
 
-        if config.email_username and config.email_password:
-            server.login(config.email_username, config.email_password)
+            if config.email_use_tls:
+                if getattr(config, "email_skip_tls_verify", False):
+                    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                    ssl_ctx.check_hostname = False
+                    ssl_ctx.verify_mode = ssl.CERT_NONE
+                else:
+                    ssl_ctx = ssl.create_default_context()
+                server.starttls(context=ssl_ctx)
+                server.ehlo()
 
-        server.sendmail(config.email_from, config.email_to, msg.as_string())
-        server.quit()
+            if config.email_username and config.email_password:
+                server.login(config.email_username, config.email_password)
+
+            server.sendmail(config.email_from, config.email_to, msg.as_string())
 
         logger.info(f"Email notification sent to {config.email_to}: {subject}")
 
@@ -233,8 +234,8 @@ def _build_legacy_body(config, summary):
         "",
     ]
 
+    lines.append("File Details:")
     if summary.get("all_files"):
-        lines.append("File Details:")
         for f in summary["all_files"]:
             path = f.get("path")
             name = f.get("name", "unknown")
@@ -249,13 +250,17 @@ def _build_legacy_body(config, summary):
                 lines.append(f"  {file_display} - {verdict} and TEX {tex_msg}")
             else:
                 lines.append(f"  {file_display} - {verdict}")
-        lines.append("")
+    else:
+        lines.append("  (none)")
+    lines.append("")
 
+    lines.append("Malicious Files:")
     if summary["malicious_files"]:
-        lines.append("Malicious Files:")
         for mf in summary["malicious_files"]:
             lines.append(f"  - {mf['name']} (verdict: {mf['verdict']})")
-        lines.append("")
+    else:
+        lines.append("  (none)")
+    lines.append("")
 
     if summary["error"] > 0:
         lines.append(
@@ -296,7 +301,6 @@ def _save_to_imap(config, body, subject):
 
     Args:
         config: ScannerConfig with IMAP settings
-        msg: MIMEMultipart message object
         body: Plain text body string
         subject: Email subject string
     """

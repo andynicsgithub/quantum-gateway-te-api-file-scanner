@@ -71,7 +71,7 @@ def _scan_log_files(log_dir: Path) -> List[_SCAN_RESULT]:
     return results
 
 
-def _cleanup_old_logs(log_dir: Path, retention_days: int) -> None:
+def cleanup_old_logs(log_dir: Path, retention_days: int) -> None:
     """
     Delete log files older than retention_days.
     Keeps at least 1 file.
@@ -143,8 +143,8 @@ def rotate_today_log(log_dir: Path) -> str:
 
     if today_files:
         today_files.sort(key=lambda x: (x[1], -x[3].stat().st_mtime), reverse=True)
-        _date, highest_num, _ext, oldest_path = today_files[-1]
-        next_num = highest_num + 1
+        _date, max_num, _ext, _oldest_path = today_files[0]
+        next_num = max_num + 1
     else:
         next_num = 0
 
@@ -173,55 +173,7 @@ def _get_today_log_name(log_dir: Path) -> Optional[str]:
     Returns None if no today file exists.
     """
     today = datetime.now().strftime("%Y-%m-%d")
-    files = _scan_log_files(log_dir)
-    today_files = [(d, n, e, p) for d, n, e, p in files if d == today]
-
-    if not today_files:
-        return None
-
-    today_files.sort(key=lambda x: (x[1], -x[3].stat().st_mtime), reverse=True)
-    _date, num, _ext, _path = today_files[-1]
-
-    if num == 0:
-        return f"{LOG_PREFIX}{today}.0.log"
-    else:
-        return f"{LOG_PREFIX}{today}.0.log"
-
-
-def check_date_change(log_dir: Path) -> bool:
-    """
-    Check if today's log file exists and is the current one.
-    Returns True if today's file exists.
-    """
-    today = datetime.now().strftime("%Y-%m-%d")
-    files = _scan_log_files(log_dir)
-    today_files = [(d, n, e, p) for d, n, e, p in files if d == today]
-
-    if not today_files:
-        return False
-
-    today_files.sort(key=lambda x: (x[1], -x[3].stat().st_mtime), reverse=True)
-    _date, num, _ext, _path = today_files[-1]
-
-    return num == 0
-
-
-def _parse_log_filename(filename: str) -> Optional[Tuple[str, int]]:
-    """
-    Parse a log filename into (date_str, rotation_number).
-    Returns None if the filename doesn't match the expected pattern.
-
-    Examples:
-        "te_scanner_2026-06-04.0.log" -> ("2026-06-04", 0)
-        "te_scanner_2026-06-04.3.log.gz" -> ("2026-06-04", 3)
-        "te_scanner_2026-06-04.log" -> ("2026-06-04", 0)
-    """
-    m = DATE_PATTERN.search(filename)
-    if not m:
-        return None
-    date_str = m.group(1)
-    num = int(m.group(2)) if m.group(2) else 0
-    return (date_str, num)
+    return f"{LOG_PREFIX}{today}.0.log"
 
 
 def _swap_file_handler(log_dir: Path) -> None:
@@ -283,7 +235,7 @@ def setup_logging(
         log_dir.mkdir(parents=True, exist_ok=True)
 
         # Phase 1: Cleanup old files
-        _cleanup_old_logs(log_dir, log_retention_days)
+        cleanup_old_logs(log_dir, log_retention_days)
 
         # Phase 2: Compress old files (older than 24 hours)
         _compress_old_files(log_dir)

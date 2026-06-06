@@ -24,11 +24,18 @@ Security:
     - Immediate shutdown on service stop (no graceful batch completion)
 """
 
-import win32serviceutil
-import win32service
-import win32event
-import servicemanager
 import os
+
+try:
+    import win32serviceutil
+    import win32service
+    import win32event
+    import servicemanager
+except ImportError as e:
+    raise ImportError(
+        f"{e.name} is required for Windows service mode. "
+        f"Install pywin32: pip install pywin32"
+    )
 
 
 class TEWatcherService(win32serviceutil.ServiceFramework):

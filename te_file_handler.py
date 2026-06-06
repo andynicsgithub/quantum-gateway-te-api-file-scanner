@@ -118,12 +118,9 @@ class TE(object):
     def log_path(self):
         """
         Return file path for logging purposes.
-        Returns 'sub_dir/file_name' if sub_dir is non-empty and not '.',
-        otherwise just 'file_name'.
+        Uses PathHandler.display_path for consistent formatting.
         """
-        if self.sub_dir and self.sub_dir != ".":
-            return f"{self.sub_dir}/{self.file_name}"
-        return self.file_name
+        return PathHandler.display_path(self.file_name, self.sub_dir)
 
     def set_file_sha1(self):
         """
@@ -235,7 +232,7 @@ class TE(object):
         request = copy.deepcopy(self.request_template)
         request["request"][0]["sha1"] = self.sha1
         data = json.dumps(request)
-        response_j = json.loads("{}")
+        response_j = {}
         status_label = False
         te_eb_found = False
         retry_no = 0
@@ -344,9 +341,9 @@ class TE(object):
         self.tex_response_info_dir.mkdir(parents=True, exist_ok=True)
         self.tex_clean_files_dir.mkdir(parents=True, exist_ok=True)
 
-    def _set_file_md5(self):
+    def _calculate_md5(self):
         """
-        Calculates the file's md5 hash.
+        Calculate and return the file's md5 hash.
         """
         md5 = hashlib.md5()
         with open(str(self.full_path), "rb") as f:
@@ -391,7 +388,7 @@ class TE(object):
                 f"{self.log_path} - Uploading to TPAPI for TEX processing: {self.url_tex}"
             )
 
-            md5 = self._set_file_md5()
+            md5 = self._calculate_md5()
             self.logger.debug(f"{self.log_path} - File MD5: {md5}")
 
             # Use configured scrubbed parts codes
@@ -588,17 +585,11 @@ class TE(object):
             self.logger.debug("{} - move_file called".format(self.log_path))
             verdict = self.parse_verdict(self.final_response, "te")
 
-            # Get last path component robustly - works for UNC, local, trailing slashes
-            def get_dir_basename(path_obj):
-                p = str(path_obj).rstrip("/\\")
-                idx = max(p.rfind("/"), p.rfind("\\"))
-                return p[idx + 1 :] if idx >= 0 else p
-
             self.logger.info(
                 f"{self.log_path} - [ZIP] verdict={verdict}, dirs: benign={self.benign_directory!r} quarantine={self.quarantine_directory!r} error={self.error_directory!r}"
             )
             if verdict == "Malicious":
-                basename = get_dir_basename(self.quarantine_directory)
+                basename = self.quarantine_directory.name
                 self.logger.info(
                     f"{self.log_path} - [ZIP] Malicious: basename={basename!r}"
                 )
@@ -608,14 +599,14 @@ class TE(object):
                 if self.report_id != "":
                     self.download_report()
             elif verdict == "Benign":
-                basename = get_dir_basename(self.benign_directory)
+                basename = self.benign_directory.name
                 self.logger.info(
                     f"{self.log_path} - [ZIP] Benign: basename={basename!r}"
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
             elif verdict == "Error":
-                basename = get_dir_basename(self.error_directory)
+                basename = self.error_directory.name
                 self.logger.info(
                     f"{self.log_path} - [ZIP] Error: basename={basename!r}"
                 )

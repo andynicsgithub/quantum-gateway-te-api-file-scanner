@@ -20,6 +20,37 @@ from functools import partial
 from datetime import datetime
 
 # =======================
+# Utility Functions
+# =======================
+
+
+def _create_zip_manager(config):
+    """
+    Create a ZipArchiveManager if zip_password is configured.
+
+    Args:
+        config: ScannerConfig object
+
+    Returns:
+        ZipArchiveManager instance or None
+    """
+    if not config.zip_password:
+        return None
+
+    zip_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    zip_mgr = ZipArchiveManager.create_archive(
+        config.zip_archive_directory, config.zip_password, zip_timestamp
+    )
+    if zip_mgr:
+        logging.getLogger("te_scanner.main").info(f"Zip archive enabled: {zip_mgr.zip_path}")
+    else:
+        logging.getLogger("te_scanner.main").warning(
+            "Failed to initialize zip archive, proceeding without it"
+        )
+    return zip_mgr
+
+
+# =======================
 # Main entry point
 # =======================
 
@@ -226,19 +257,7 @@ def main():
         logger.info("Dependencies check passed.")
 
         # Prepare zip archive if password is configured
-        zip_mgr = None
-        zip_timestamp = None
-        if config.zip_password:
-            zip_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            zip_mgr = ZipArchiveManager.create_archive(
-                config.zip_archive_directory, config.zip_password, zip_timestamp
-            )
-            if zip_mgr:
-                logger.info(f"Zip archive enabled: {zip_mgr.zip_path}")
-            else:
-                logger.warning(
-                    "Failed to initialize zip archive, proceeding without it"
-                )
+        zip_mgr = _create_zip_manager(config)
 
         # Process any existing files immediately
         archive_files, other_files = discover_files(config.input_directory, config)
@@ -261,7 +280,7 @@ def main():
         from file_watcher import start_watching
 
         try:
-            start_watching(config, url, url_tex, zip_mgr)
+            start_watching(config, url, url_tex)
         except Exception as e:
             logger.error(f"ERROR starting watcher: {e}")
             import traceback
@@ -275,18 +294,7 @@ def main():
         logger.info(f"Parallel processing of {config.concurrency} files at once")
 
         # Prepare zip archive if password is configured
-        zip_mgr = None
-        if config.zip_password:
-            zip_timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-            zip_mgr = ZipArchiveManager.create_archive(
-                config.zip_archive_directory, config.zip_password, zip_timestamp
-            )
-            if zip_mgr:
-                logger.info(f"Zip archive enabled: {zip_mgr.zip_path}")
-            else:
-                logger.warning(
-                    "Failed to initialize zip archive, proceeding without it"
-                )
+        zip_mgr = _create_zip_manager(config)
 
         # Discover files
         archive_files, other_files = discover_files(config.input_directory, config)
@@ -330,21 +338,12 @@ def main():
     return 0
 
 
-# =======================
-# Utility Functions
-# =======================
-
-
 def _file_display_path(file_name, sub_dir):
     """
     Return a display-friendly path for logging purposes.
-
-    Returns 'sub_dir/file_name' if sub_dir is non-empty and not '.',
-    otherwise just 'file_name'.
+    Uses PathHandler.display_path for consistent formatting.
     """
-    if sub_dir and sub_dir != ".":
-        return f"{sub_dir}/{file_name}"
-    return file_name
+    return PathHandler.display_path(file_name, sub_dir)
 
 
 def discover_files(input_directory, config):
@@ -376,7 +375,7 @@ def discover_files(input_directory, config):
         sub_dir = os.path.relpath(root, input_directory)
         for file in files:
             full_path = os.path.join(root, file)
-            file_nameonly, file_extension = os.path.splitext(file)
+            _, file_extension = os.path.splitext(file)
 
             # Sanitize filename for API compatibility (UTF-8 only)
             safe_file_name = sanitize_filename(file, seen)
@@ -555,7 +554,8 @@ def process_files(
         config: ScannerConfig object
         url: TE API URL
         url_tex: TEX API URL (may be empty if TEX disabled)
-        zip_config: Tuple of (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
+        zip_config: ZipArchiveManager instance (single-process mode) or tuple of
+            (zip_path, zip_password, benign_basename, quarantine_basename, error_basename, temp_dir)
 
     Returns:
         dict with keys: 'name', 'path', 'verdict', 'status'
@@ -576,7 +576,7 @@ def process_files(
         "status": "error",
     }
     try:
-        logger.info(
+        logger.debug(
             f"Handling file: {_file_display_path(file_name, sub_dir)} (zip_config type={type(zip_config).__name__})"
         )
         te = TE(

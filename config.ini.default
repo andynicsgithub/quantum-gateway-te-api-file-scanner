@@ -10,9 +10,8 @@ error_directory = /path/to/directory/for/files/that/error
 #Directory to store the archive of the files processed, and the password to be used in the zip file.
 zip_archive_directory = /path/to/directory/for/zip/archives
 zip_password =
-#How many files to process at once.
+#How to process files - how many can the appliance handle at once, how long to wait between queries, how many times to query before giving up.
 concurrency = 4
-#How long to wait between queries to get the verdict. Recommended between 5 and 15. Ensure that seconds_to_wait multiplied by max_retries is 5 minutes or more.
 seconds_to_wait = 10
 max_retries = 120
 
@@ -156,15 +155,15 @@ xml = true
 # Scrubbed parts codes to include in TEX scrub request
 # Each entry enables that content part for scrubbing
 # Disabled entries (false) are excluded from the scrub request
-1017 = true   # Custom Properties
+1017 = false   # Custom Properties
 1018 = true   # Database Queries
 1019 = true   # Embedded Objects
 1021 = true   # Fast Save Data
 1025 = true   # Linked Objects
 1026 = true   # Macros and Code
 1034 = true   # Sensitive Hyperlinks
-1036 = true   # Statistic Properties
-1037 = true   # Summary Properties
+1036 = false   # Statistic Properties
+1037 = false   # Summary Properties
 1137 = true   # PDF GoToR Actions
 1139 = true   # PDF Launch Actions
 1141 = true   # PDF URI Actions
@@ -172,5 +171,5 @@ xml = true
 1143 = true   # PDF Movie Actions
 1150 = true   # PDF JavaScript Actions
 1151 = true   # PDF Submit Form Actions
-1178 = true   # PDF 3D Artwork Annotations
-500 = true    # Embedded Images
+1178 = false   # PDF 3D Artwork Annotations
+500 = false    # Embedded Images

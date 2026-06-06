@@ -64,9 +64,7 @@ class ScannerConfig:
     email_imap_folder: str = "Sent"
 
     # Zip archive configuration
-    zip_archive_directory: Path = field(
-        default_factory=lambda: Path("test_zip_archives")
-    )
+    zip_archive_directory: Optional[Path] = None
     zip_password: str = ""
 
     # TEX (Scrub) configuration
@@ -143,6 +141,12 @@ class ScannerConfig:
         if self.zip_password and not self.zip_archive_directory:
             errors.append("zip_archive_directory is required when zip_password is set")
 
+        # Validate TEX settings
+        if self.tex_enabled and not self.tex_url:
+            errors.append("tex_url is required when tex_enabled is true")
+        if self.tex_enabled and not self.tex_api_key:
+            errors.append("tex_api_key is required when tex_enabled is true")
+
         return (len(errors) == 0, errors)
 
     @classmethod
@@ -204,7 +208,7 @@ class ScannerConfig:
             "email_imap_username": "",
             "email_imap_password": "",
             "email_imap_folder": "Sent",
-            "zip_archive_directory": "test_zip_archives",
+            "zip_archive_directory": None,
             "zip_password": "",
             "tex_enabled": False,
             "tex_url": "",
@@ -244,6 +248,7 @@ class ScannerConfig:
                     "email_skip_tls_verify",
                     "email_imap_enabled",
                     "email_imap_use_ssl",
+                    "tex_enabled",
                 ]:
                     config_data[key] = value.lower() in ["true", "1", "yes", "on"]
                 else:
@@ -278,13 +283,6 @@ class ScannerConfig:
                                 print(
                                     f"Warning: Invalid integer value in config for {key}: {value}"
                                 )
-                        elif key in ["watch_mode"]:
-                            config_data[key] = value.lower() in [
-                                "true",
-                                "1",
-                                "yes",
-                                "on",
-                            ]
                         else:
                             config_data[key] = value
 
@@ -299,9 +297,6 @@ class ScannerConfig:
                         if key in [
                             "max_log_size_mb",
                             "log_retention_days",
-                            "watch_batch_delay",
-                            "watch_min_batch",
-                            "watch_max_batch",
                         ]:
                             try:
                                 config_data[key] = int(value)
@@ -309,13 +304,6 @@ class ScannerConfig:
                                 print(
                                     f"Warning: Invalid integer value in config for {key}: {value}"
                                 )
-                        elif key in ["watch_mode"]:
-                            config_data[key] = value.lower() in [
-                                "true",
-                                "1",
-                                "yes",
-                                "on",
-                            ]
                         else:
                             config_data[key] = value
 
@@ -407,6 +395,7 @@ class ScannerConfig:
                         elif key in [
                             "email_enabled",
                             "email_use_tls",
+                            "email_skip_tls_verify",
                             "email_imap_enabled",
                             "email_imap_use_ssl",
                         ]:
@@ -478,7 +467,10 @@ class ScannerConfig:
             "tex_clean_files_directory",
         ]
         for key in path_keys:
-            config_data[key] = PathHandler.normalize_path(config_data[key])
+            if config_data[key] is not None:
+                config_data[key] = PathHandler.normalize_path(config_data[key])
+            else:
+                config_data[key] = Path("test_zip_archives")
 
         # Ensure all integer fields are actually integers (configparser returns strings)
         int_fields = [
@@ -543,6 +535,12 @@ class ScannerConfig:
         ):
             config_data["email_imap_use_ssl"] = str(
                 config_data["email_imap_use_ssl"]
+            ).lower() in ["true", "1", "yes", "on"]
+        if "email_skip_tls_verify" in config_data and not isinstance(
+            config_data["email_skip_tls_verify"], bool
+        ):
+            config_data["email_skip_tls_verify"] = str(
+                config_data["email_skip_tls_verify"]
             ).lower() in ["true", "1", "yes", "on"]
 
         # Create and return ScannerConfig instance

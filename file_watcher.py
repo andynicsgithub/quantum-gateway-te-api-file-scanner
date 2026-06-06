@@ -12,12 +12,14 @@ Features:
 
 import os
 import time
+import threading
 import logging
 from pathlib import Path
 from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
+from path_handler import PathHandler
 
 
 class CopyCompletionWatcher(FileSystemEventHandler):
@@ -50,6 +52,7 @@ class CopyCompletionWatcher(FileSystemEventHandler):
 
         # State tracking
         self.pending_files = {}  # path -> {created, last_modified, closed, size}
+        self._lock = threading.Lock()
         self.batch_delay = config.watch_batch_delay
         self.min_batch = config.watch_min_batch
         self.max_batch = config.watch_max_batch
@@ -59,15 +62,20 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             f"min_batch={self.min_batch}, max_batch={self.max_batch}"
         )
 
-    def on_created(self, event):
+    def on_created(self, event, path_override=None):
         """
         Triggered when a file is created (copy started).
+
+        Args:
+            event: File system event
+            path_override: Optional path to use instead of event.src_path
+                          (used for move events where src_path is stale)
         """
         if event.is_directory:
             return
 
         try:
-            file_path = str(Path(event.src_path).resolve())
+            file_path = str(Path(path_override or event.src_path).resolve())
             self.logger.info(f"[WATCHER] on_created: {file_path}")
 
             # Check if file still exists (might be deleted immediately)
@@ -75,14 +83,15 @@ class CopyCompletionWatcher(FileSystemEventHandler):
                 self.logger.warning(f"[WATCHER] File deleted immediately: {file_path}")
                 return
 
-            self.pending_files[file_path] = {
-                "created": time.time(),
-                "last_modified": time.time(),
-                "closed": False,
-                "size": os.path.getsize(file_path),
-            }
+            with self._lock:
+                self.pending_files[file_path] = {
+                    "created": time.time(),
+                    "last_modified": time.time(),
+                    "closed": False,
+                    "size": os.path.getsize(file_path),
+                }
             self.logger.info(
-                f"[WATCHER] Added to pending: {file_path} (size: {self.pending_files[file_path]['size']} bytes)"
+                f"[WATCHER] Added to pending: {file_path} (size: {self.pending_files.get(file_path, {}).get('size', 'unknown')} bytes)"
             )
 
             # Check if this single file should trigger immediately
@@ -109,11 +118,11 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             self.logger.info(f"[WATCHER] on_modified: {file_path}")
 
             if file_path in self.pending_files:
-                # Update activity timestamp
-                old_size = self.pending_files[file_path]["size"]
-                self.pending_files[file_path]["last_modified"] = time.time()
-                new_size = os.path.getsize(file_path)
-                self.pending_files[file_path]["size"] = new_size
+                with self._lock:
+                    old_size = self.pending_files[file_path]["size"]
+                    self.pending_files[file_path]["last_modified"] = time.time()
+                    new_size = os.path.getsize(file_path)
+                    self.pending_files[file_path]["size"] = new_size
                 self.logger.info(
                     f"[WATCHER] File growing: {file_path} ({old_size} → {new_size} bytes)"
                 )
@@ -142,8 +151,9 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             self.logger.info(f"[WATCHER] on_closed: {file_path}")
 
             if file_path in self.pending_files:
-                self.pending_files[file_path]["closed"] = True
-                self.pending_files[file_path]["last_modified"] = time.time()
+                with self._lock:
+                    self.pending_files[file_path]["closed"] = True
+                    self.pending_files[file_path]["last_modified"] = time.time()
                 self.logger.info(f"[WATCHER] File closed (copy complete): {file_path}")
 
                 # Check if we should trigger batch immediately (single file, no delay)
@@ -164,8 +174,8 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         if event.is_directory:
             return
 
-        # Treat as created event
-        self.on_created(event)
+        # Treat as created event, using dest_path (src_path is the old location)
+        self.on_created(event, path_override=event.dest_path)
 
     def _check_batch_ready(self):
         """
@@ -173,59 +183,40 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         Uses "stale file" detection: a file is ready if it hasn't been modified
         for batch_delay seconds. This works on all platforms, even where
         on_closed events don't fire (Windows).
-        """
-        if not self.pending_files:
-            return
 
+        All operations (snapshot, stale detection, pop, callback) are performed
+        under a single lock acquisition to prevent the event thread and polling
+        loop from both triggering the same batch.
+        """
         now = time.time()
 
-        # Find files that are "stale" (no modification for batch_delay seconds)
-        stale_files = {}
-        still_copying = False
-
-        for file_path, info in self.pending_files.items():
-            time_since_last_modified = now - info["last_modified"]
+        with self._lock:
+            if not self.pending_files:
+                return
 
             # Check batch size constraints first
-            if self.min_batch > 0:
-                file_count = len(self.pending_files)
-                if file_count < self.min_batch:
-                    still_copying = True
-                    continue
+            if self.min_batch > 0 and len(self.pending_files) < self.min_batch:
+                return
 
+            # Find files that are "stale" (no modification for batch_delay seconds)
+            stale_files = {}
             if self.max_batch > 0 and len(self.pending_files) >= self.max_batch:
-                # Max batch reached — add all pending files to stale for immediate processing
-                for fp, info in self.pending_files.items():
-                    stale_files[fp] = info
-                still_copying = False
-                break
-
-            if time_since_last_modified >= self.batch_delay:
-                stale_files[file_path] = info
-                self.logger.info(
-                    f"[WATCHER] File marked as ready (stale for {time_since_last_modified:.1f}s): {file_path}"
-                )
+                stale_files = dict(self.pending_files)
             else:
-                still_copying = True
+                for file_path, info in self.pending_files.items():
+                    time_since_last_modified = now - info["last_modified"]
+                    if time_since_last_modified >= self.batch_delay:
+                        stale_files[file_path] = info
 
-        if still_copying or not stale_files:
-            return
+            if not stale_files:
+                return
 
-        # Process stale files
-        self.logger.info(f"[WATCHER] {len(stale_files)} files ready for processing")
-        self._trigger_stale_batch(stale_files)
+            file_paths = list(stale_files.keys())
+            for path in file_paths:
+                self.pending_files.pop(path, None)
 
-    def _trigger_stale_batch(self, stale_files):
-        """
-        Trigger batch processing for stale (completed) files.
-        """
-        if not stale_files:
-            return
-
-        file_paths = list(stale_files.keys())
-        for path in file_paths:
-            del self.pending_files[path]
-
+        # Process stale files outside the lock (callback may be slow)
+        self.logger.info(f"[WATCHER] {len(file_paths)} files ready for processing")
         self.logger.info(
             f"[WATCHER] Triggering batch processing: {len(file_paths)} files"
         )
@@ -234,14 +225,22 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             self.batch_callback(file_paths)
         except Exception as e:
             self.logger.error(f"[WATCHER] Error in batch callback: {e}")
-            for path in file_paths:
-                if os.path.exists(path):
-                    self.pending_files[path] = {
-                        "created": time.time(),
-                        "last_modified": time.time(),
-                        "closed": True,
-                        "size": os.path.getsize(path),
-                    }
+            with self._lock:
+                for path in file_paths:
+                    if os.path.exists(path):
+                        self.pending_files[path] = {
+                            "created": time.time(),
+                            "last_modified": time.time(),
+                            "closed": True,
+                            "size": os.path.getsize(path),
+                        }
+
+    def _trigger_stale_batch(self, stale_files):
+        """
+        Legacy method — no longer used (race condition fixed in _check_batch_ready).
+        Kept for backward compatibility if external callers reference it.
+        """
+        pass
 
     def get_pending_count(self):
         """Return number of files currently pending."""
@@ -295,7 +294,7 @@ class WatcherThread:
         return self.watcher.get_pending_count()
 
 
-def start_watching(config, url, url_tex="", initial_zip_mgr=None):
+def start_watching(config, url, url_tex=""):
     """
     Start file watching (blocking call).
 
@@ -303,7 +302,6 @@ def start_watching(config, url, url_tex="", initial_zip_mgr=None):
         config: ScannerConfig object
         url: TE API URL
         url_tex: TEX API URL (may be empty if TEX disabled)
-        initial_zip_mgr: ZipArchiveManager for pre-existing files (None = not applicable)
     """
     logger = logging.getLogger("te_scanner.watcher")
 
@@ -364,7 +362,7 @@ def start_watching(config, url, url_tex="", initial_zip_mgr=None):
                 if sub_dir == ".":
                     sub_dir = ""
 
-                display_path = f"{sub_dir}/{file_name}" if sub_dir else file_name
+                display_path = PathHandler.display_path(file_name, sub_dir)
                 batch_logger.info(f"Processing: {display_path}")
 
                 # Create TE instance and process
@@ -498,7 +496,7 @@ def start_watching(config, url, url_tex="", initial_zip_mgr=None):
                             >= config.max_log_size_mb * 1024 * 1024
                         ):
                             rotate_today_log(config.log_dir)
-                        _swap_file_handler(config.log_dir)
+                            _swap_file_handler(config.log_dir)
 
                 pending = watcher_thread.get_pending_count()
                 if pending > 0:

@@ -13,6 +13,7 @@ In single-process mode (watch mode), files are added directly to the zip.
 import pyzipper
 import logging
 from pathlib import Path
+from path_handler import PathHandler
 
 
 class ZipArchiveManager:
@@ -85,7 +86,7 @@ class ZipArchiveManager:
         if self._zip_file is None:
             return
 
-        display_path = f"{sub_dir}/{file_name}" if sub_dir else file_name
+        display_path = PathHandler.display_path(file_name, sub_dir)
 
         try:
             src = Path(source_path)

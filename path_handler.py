@@ -326,3 +326,22 @@ class PathHandler:
             return value == 1
         except Exception:
             return False
+
+    @staticmethod
+    def display_path(file_name: str, sub_dir: str) -> str:
+        """
+        Return a display-friendly path for logging purposes.
+
+        Returns 'sub_dir/file_name' if sub_dir is non-empty and not '.',
+        otherwise just 'file_name'.
+
+        Args:
+            file_name: The file's name
+            sub_dir: Subdirectory relative to input directory
+
+        Returns:
+            Display-friendly path string
+        """
+        if sub_dir and sub_dir != ".":
+            return f"{sub_dir}/{file_name}"
+        return file_name
