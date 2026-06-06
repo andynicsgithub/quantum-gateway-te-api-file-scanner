@@ -358,7 +358,16 @@ def main():
                 stream.flush()
 
         # End-of-run: rotate if over size limit, cleanup old files
+        # Close existing file handlers so rename succeeds on Windows (WinError 32)
+        root_logger = logging.getLogger("te_scanner")
+        for h in root_logger.handlers:
+            if isinstance(h, logging.FileHandler):
+                h.close()
+                root_logger.removeHandler(h)
         rotate_today_log(config.log_dir)
+        # Re-add file handler for any remaining log output
+        from logger_config import _swap_file_handler
+        _swap_file_handler(config.log_dir)
         cleanup_old_logs(config.log_dir, config.log_retention_days)
 
     return 0
