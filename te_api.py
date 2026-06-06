@@ -400,6 +400,9 @@ def discover_files(input_directory, config):
     for root, dirs, files in os.walk(str(input_directory)):
         # Extract the subdirectory relative to the input_directory
         sub_dir = os.path.relpath(root, input_directory)
+        # Normalize "." (root level) to empty string to avoid path issues
+        if sub_dir == ".":
+            sub_dir = ""
         for file in files:
             full_path = os.path.join(root, file)
             _, file_extension = os.path.splitext(file)
