@@ -4,6 +4,7 @@
 input_directory = /path/to/source/files
 reports_directory = /path/to/directory/for/report/files
 appliance_ip = 192.168.1.1
+appliance_skip_tls_verify = false
 benign_directory = /path/to/directory/for/safe/files
 quarantine_directory = /path/to/quarantine
 error_directory = /path/to/directory/for/files/that/error
@@ -41,8 +42,8 @@ qcow2 = true
 
 [WATCHER]
 # Watch mode settings (used when running with --watch flag)
-# Wait time in seconds after last file activity before processing batch. Must be 1 or greater.
-watch_batch_delay = 5
+  # Wait time in seconds after last file activity before processing batch. Must be between 1 and 60.
+   watch_batch_delay = 5
 
 # Minimum files to trigger batch (0 = process immediately after delay)
 watch_min_batch = 0
@@ -83,6 +84,7 @@ email_imap_use_ssl = true
 email_imap_username = 
 email_imap_password = 
 email_imap_folder = Sent
+email_imap_skip_tls_verify = false
 
 [LOGGING]
 log_level = INFO

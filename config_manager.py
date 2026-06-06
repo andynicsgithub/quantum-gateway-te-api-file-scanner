@@ -9,9 +9,10 @@ Supports loading from config file, command-line arguments, and environment varia
 import os
 import configparser
 import argparse
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Set
 from path_handler import PathHandler
 
 
@@ -28,6 +29,7 @@ class ScannerConfig:
     quarantine_directory: Path
     error_directory: Path
     appliance_ip: str
+    appliance_skip_tls_verify: bool = False
     concurrency: int = 4
     seconds_to_wait: int = 10
     max_retries: int = 120
@@ -39,7 +41,7 @@ class ScannerConfig:
     watch_max_batch: int = 0
 
     # Archive file types
-    archive_extensions: set[str] = field(default_factory=set)
+    archive_extensions: Set[str] = field(default_factory=set)
 
     # Email notification configuration
     email_enabled: bool = False
@@ -59,6 +61,7 @@ class ScannerConfig:
     email_imap_server: str = ""
     email_imap_port: int = 993
     email_imap_use_ssl: bool = True
+    email_imap_skip_tls_verify: bool = False
     email_imap_username: str = ""
     email_imap_password: str = ""
     email_imap_folder: str = "Sent"
@@ -77,8 +80,8 @@ class ScannerConfig:
     tex_clean_files_directory: Path = field(
         default_factory=lambda: Path("tex_clean_files")
     )
-    tex_supported_file_types: set[str] = field(default_factory=set)
-    tex_scrubbed_parts_codes: set[int] = field(default_factory=set)
+    tex_supported_file_types: Set[str] = field(default_factory=set)
+    tex_scrubbed_parts_codes: Set[int] = field(default_factory=set)
 
     # Logging configuration
     log_level: str = "INFO"
@@ -137,6 +140,11 @@ class ScannerConfig:
         if self.watch_max_batch < 0:
             errors.append("watch_max_batch cannot be negative")
 
+        # Validate log level
+        if not hasattr(logging, self.log_level.upper()):
+            valid_levels = [level for level in dir(logging) if level.isupper() and not level.startswith('_')]
+            errors.append(f"log_level must be one of: {', '.join(sorted(valid_levels))}")
+
         # Validate zip archive settings
         if self.zip_password and not self.zip_archive_directory:
             errors.append("zip_archive_directory is required when zip_password is set")
@@ -179,6 +187,7 @@ class ScannerConfig:
             "quarantine_directory": "quarantine_files",
             "error_directory": "error_files",
             "appliance_ip": "",
+            "appliance_skip_tls_verify": False,
             "concurrency": 4,
             "seconds_to_wait": 10,
             "max_retries": 120,
@@ -205,6 +214,7 @@ class ScannerConfig:
             "email_imap_server": "",
             "email_imap_port": 993,
             "email_imap_use_ssl": True,
+            "email_imap_skip_tls_verify": False,
             "email_imap_username": "",
             "email_imap_password": "",
             "email_imap_folder": "Sent",
@@ -236,6 +246,7 @@ class ScannerConfig:
                     "watch_min_batch",
                     "watch_max_batch",
                     "email_smtp_port",
+                    "email_imap_port",
                 ]:
                     try:
                         config_data[key] = int(value)
@@ -248,6 +259,8 @@ class ScannerConfig:
                     "email_skip_tls_verify",
                     "email_imap_enabled",
                     "email_imap_use_ssl",
+                    "email_imap_skip_tls_verify",
+                    "appliance_skip_tls_verify",
                     "tex_enabled",
                 ]:
                     config_data[key] = value.lower() in ["true", "1", "yes", "on"]
@@ -263,8 +276,8 @@ class ScannerConfig:
             if "DEFAULT" in parser:
                 section = parser["DEFAULT"]
 
-                for key in config_data.keys():
-                    if key in section:
+                for key in section:
+                    if key in config_data:
                         value = section[key]
                         # Convert types appropriately
                         if key in [
@@ -283,6 +296,13 @@ class ScannerConfig:
                                 print(
                                     f"Warning: Invalid integer value in config for {key}: {value}"
                                 )
+                        elif key == "appliance_skip_tls_verify":
+                            config_data[key] = value.lower() in [
+                                "true",
+                                "1",
+                                "yes",
+                                "on",
+                            ]
                         else:
                             config_data[key] = value
 
@@ -290,8 +310,8 @@ class ScannerConfig:
             if "LOGGING" in parser:
                 section = parser["LOGGING"]
 
-                for key in config_data.keys():
-                    if key in section:
+                for key in section:
+                    if key in config_data and key not in parser.defaults():
                         value = section[key]
                         # Convert types appropriately
                         if key in [
@@ -311,8 +331,8 @@ class ScannerConfig:
             if "WATCHER" in parser:
                 section = parser["WATCHER"]
 
-                for key in config_data.keys():
-                    if key in section:
+                for key in section:
+                    if key in config_data and key not in parser.defaults():
                         value = section[key]
                         # Convert types appropriately
                         if key in [
@@ -333,8 +353,8 @@ class ScannerConfig:
             if "TEX" in parser:
                 section = parser["TEX"]
 
-                for key in config_data.keys():
-                    if key in section:
+                for key in section:
+                    if key in config_data and key not in parser.defaults():
                         value = section[key]
                         if key in ["tex_enabled"]:
                             config_data[key] = value.lower() in [
@@ -381,8 +401,8 @@ class ScannerConfig:
             if "EMAIL" in parser:
                 section = parser["EMAIL"]
 
-                for key in config_data.keys():
-                    if key in section:
+                for key in section:
+                    if key in config_data and key not in parser.defaults():
                         value = section[key]
                         # Convert types appropriately
                         if key in ["email_smtp_port", "email_imap_port"]:
@@ -398,6 +418,7 @@ class ScannerConfig:
                             "email_skip_tls_verify",
                             "email_imap_enabled",
                             "email_imap_use_ssl",
+                            "email_imap_skip_tls_verify",
                         ]:
                             config_data[key] = value.lower() in [
                                 "true",
@@ -411,14 +432,20 @@ class ScannerConfig:
         # 4. Override with command-line arguments (highest priority)
         if cli_args:
             # (cli_attr, config_key) mappings — applies getattr(cli_args, attr) if truthy
+            _cli_override_keys = {
+                "appliance_skip_tls_verify",  # bool with default=None → use "is not None"
+            }
             _cli_mappings = [
                 ("input_directory", "input_directory"),
                 ("reports_directory", "reports_directory"),
                 ("appliance_ip", "appliance_ip"),
+                ("appliance_skip_tls_verify", "appliance_skip_tls_verify"),
                 ("benign_directory", "benign_directory"),
                 ("quarantine_directory", "quarantine_directory"),
                 ("error_directory", "error_directory"),
                 ("concurrency", "concurrency"),
+                ("seconds_to_wait", "seconds_to_wait"),
+                ("max_retries", "max_retries"),
                 ("watch", "watch_mode"),
                 ("watch_delay", "watch_batch_delay"),
                 ("watch_min", "watch_min_batch"),
@@ -437,17 +464,32 @@ class ScannerConfig:
                 ("email_imap_server", "email_imap_server"),
                 ("email_imap_port", "email_imap_port"),
                 ("email_imap_use_ssl", "email_imap_use_ssl"),
+                ("email_imap_skip_tls_verify", "email_imap_skip_tls_verify"),
                 ("email_imap_username", "email_imap_username"),
                 ("email_imap_folder", "email_imap_folder"),
                 ("zip_archive_directory", "zip_archive_directory"),
                 ("tex_enabled", "tex_enabled"),
                 ("tex_url", "tex_url"),
-                ("tex_response_info_directory", "tex_response_info_directory"),
-                ("tex_clean_files_directory", "tex_clean_files_directory"),
+                ("tex_response_info_dir", "tex_response_info_directory"),
+                ("tex_clean_files_dir", "tex_clean_files_directory"),
             ]
+            _int_cli_keys = {
+                "concurrency",
+                "seconds_to_wait",
+                "max_retries",
+                "watch_batch_delay",
+                "watch_min_batch",
+                "watch_max_batch",
+            }
             for cli_attr, config_key in _cli_mappings:
                 val = getattr(cli_args, cli_attr, None)
-                if val:
+                if config_key in _int_cli_keys:
+                    if val is not None:
+                        config_data[config_key] = val
+                elif config_key in _cli_override_keys:
+                    if val is not None:
+                        config_data[config_key] = val
+                elif val:
                     config_data[config_key] = val
 
             # zip_password uses `is not None` because empty string is falsy but valid
@@ -470,7 +512,7 @@ class ScannerConfig:
             if config_data[key] is not None:
                 config_data[key] = PathHandler.normalize_path(config_data[key])
             else:
-                config_data[key] = Path("test_zip_archives")
+                config_data[key] = None
 
         # Ensure all integer fields are actually integers (configparser returns strings)
         int_fields = [
@@ -500,48 +542,26 @@ class ScannerConfig:
                     }
                     config_data[key] = defaults.get(key, 0)
 
-        # Ensure watch_mode is boolean
-        if "watch_mode" in config_data and not isinstance(
-            config_data["watch_mode"], bool
-        ):
-            config_data["watch_mode"] = str(config_data["watch_mode"]).lower() in [
-                "true",
-                "1",
-                "yes",
-                "on",
-            ]
-
-        # Ensure email boolean fields are actually booleans
-        if "email_enabled" in config_data and not isinstance(
-            config_data["email_enabled"], bool
-        ):
-            config_data["email_enabled"] = str(
-                config_data["email_enabled"]
-            ).lower() in ["true", "1", "yes", "on"]
-        if "email_use_tls" in config_data and not isinstance(
-            config_data["email_use_tls"], bool
-        ):
-            config_data["email_use_tls"] = str(
-                config_data["email_use_tls"]
-            ).lower() in ["true", "1", "yes", "on"]
-        if "email_imap_enabled" in config_data and not isinstance(
-            config_data["email_imap_enabled"], bool
-        ):
-            config_data["email_imap_enabled"] = str(
-                config_data["email_imap_enabled"]
-            ).lower() in ["true", "1", "yes", "on"]
-        if "email_imap_use_ssl" in config_data and not isinstance(
-            config_data["email_imap_use_ssl"], bool
-        ):
-            config_data["email_imap_use_ssl"] = str(
-                config_data["email_imap_use_ssl"]
-            ).lower() in ["true", "1", "yes", "on"]
-        if "email_skip_tls_verify" in config_data and not isinstance(
-            config_data["email_skip_tls_verify"], bool
-        ):
-            config_data["email_skip_tls_verify"] = str(
-                config_data["email_skip_tls_verify"]
-            ).lower() in ["true", "1", "yes", "on"]
+        # Ensure all boolean fields are actually booleans
+        _bool_fields = [
+            "watch_mode",
+            "appliance_skip_tls_verify",
+            "tex_enabled",
+            "email_enabled",
+            "email_use_tls",
+            "email_skip_tls_verify",
+            "email_imap_enabled",
+            "email_imap_use_ssl",
+            "email_imap_skip_tls_verify",
+        ]
+        for key in _bool_fields:
+            if key in config_data and not isinstance(config_data[key], bool):
+                config_data[key] = str(config_data[key]).lower() in [
+                    "true",
+                    "1",
+                    "yes",
+                    "on",
+                ]
 
         # Create and return ScannerConfig instance
         return cls(**config_data)

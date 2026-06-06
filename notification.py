@@ -9,9 +9,9 @@ and optional IMAP "Sent" folder saving.
 
 import smtplib
 import ssl
-import os
 import logging
 import imaplib
+from email.header import Header
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -54,7 +54,7 @@ def send_batch_notification(config, summary):
         msg["Subject"] = subject
         msg.attach(MIMEText(body, "plain"))
 
-       # Send via SMTP
+        # Send via SMTP
         logger.debug(
             f"Connecting to SMTP server {config.email_smtp_server}:{config.email_smtp_port}"
         )
@@ -165,25 +165,8 @@ def _render_template(template_file, config, summary):
     timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
     # Build file list from all_files (if available)
-    file_list = ""
     all_files = summary.get("all_files", [])
-    if all_files:
-        lines = []
-        for f in all_files:
-            path = f.get("path")
-            name = f.get("name", "unknown")
-            verdict = f.get("verdict", "unknown")
-            tex_status = f.get("tex_status")
-            if path:
-                file_display = f"{path}/{name}"
-            else:
-                file_display = name
-            tex_msg = _get_tex_status_message(tex_status)
-            if tex_msg:
-                lines.append(f"  {file_display} - {verdict} and TEX {tex_msg}")
-            else:
-                lines.append(f"  {file_display} - {verdict}")
-        file_list = "\n".join(lines)
+    file_list = _format_file_list(all_files) if all_files else ""
 
     # Build malicious files list
     malicious_files = ""
@@ -208,7 +191,24 @@ def _render_template(template_file, config, summary):
 
     try:
         t = Template(template_str)
-        return t.safe_substitute(template_data)
+        rendered = t.safe_substitute(template_data)
+        # Conditionally strip error note to avoid "Note: 0 file(s)..." on clean runs
+        error_count = template_data["error"]
+        if error_count == 0:
+            lines = rendered.split("\n")
+            filtered = []
+            skip = False
+            for line in lines:
+                if line.startswith("Note:") and "file(s) encountered errors" in line:
+                    skip = True
+                    continue
+                if skip:
+                    if line.strip() == "" or line.startswith("Check logs"):
+                        continue
+                    skip = False
+                filtered.append(line)
+            rendered = "\n".join(filtered)
+        return rendered
     except Exception as e:
         logger.warning(
             f"Failed to render template file '{template_file}': {e}. Using legacy body."
@@ -235,23 +235,7 @@ def _build_legacy_body(config, summary):
     ]
 
     lines.append("File Details:")
-    if summary.get("all_files"):
-        for f in summary["all_files"]:
-            path = f.get("path")
-            name = f.get("name", "unknown")
-            verdict = f.get("verdict", "unknown")
-            tex_status = f.get("tex_status")
-            if path:
-                file_display = f"{path}/{name}"
-            else:
-                file_display = name
-            tex_msg = _get_tex_status_message(tex_status)
-            if tex_msg:
-                lines.append(f"  {file_display} - {verdict} and TEX {tex_msg}")
-            else:
-                lines.append(f"  {file_display} - {verdict}")
-    else:
-        lines.append("  (none)")
+    lines.append(_format_file_list(summary.get("all_files")))
     lines.append("")
 
     lines.append("Malicious Files:")
@@ -292,6 +276,33 @@ def _get_tex_status_message(tex_status):
         return ""
 
 
+def _format_file_list(all_files):
+    """
+    Render a file list for email display.
+
+    Returns:
+        str: Formatted file list lines joined by newlines, or empty string
+    """
+    if not all_files:
+        return "(none)"
+    lines = []
+    for f in all_files:
+        path = f.get("path")
+        name = f.get("name", "unknown")
+        verdict = f.get("verdict", "unknown")
+        tex_status = f.get("tex_status")
+        if path:
+            file_display = f"{path}/{name}"
+        else:
+            file_display = name
+        tex_msg = _get_tex_status_message(tex_status)
+        if tex_msg:
+            lines.append(f"  {file_display} - {verdict} and TEX {tex_msg}")
+        else:
+            lines.append(f"  {file_display} - {verdict}")
+    return "\n".join(lines)
+
+
 def _save_to_imap(config, body, subject):
     """
     Save the sent email to an IMAP 'Sent' folder.
@@ -325,24 +336,30 @@ def _save_to_imap(config, body, subject):
 
     try:
         if imap_use_ssl:
-            imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port)
+            if getattr(config, "email_imap_skip_tls_verify", False):
+                ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+                imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port, context=ssl_ctx, timeout=30)
+            else:
+                imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port, timeout=30)
         else:
-            imap_conn = imaplib.IMAP4(imap_server, imap_port)
+            imap_conn = imaplib.IMAP4(imap_server, imap_port, timeout=30)
 
         imap_conn.login(imap_username, imap_password)
 
         # Prepare the raw message for APPEND
         raw_lines = [
-            f"Subject: {subject}",
-            f"From: {config.email_from}",
-            f"To: {config.email_to}",
+            "Subject: {}".format(Header(subject, "utf-8")),
+            "From: {}".format(Header(config.email_from, "utf-8")),
+            "To: {}".format(Header(config.email_to, "utf-8")),
             "",
         ]
         raw_lines.append(body)
         raw_msg = "\r\n".join(raw_lines)
 
         # Append to the IMAP folder
-        imap_conn.append(imap_folder, "", None, raw_msg.encode("utf-8"))
+        imap_conn.append(imap_folder, "()", None, raw_msg.encode("utf-8"))
 
         imap_conn.logout()
 

@@ -74,7 +74,6 @@ def _scan_log_files(log_dir: Path) -> List[_SCAN_RESULT]:
 def cleanup_old_logs(log_dir: Path, retention_days: int) -> None:
     """
     Delete log files older than retention_days.
-    Keeps at least 1 file.
     """
     cutoff = datetime.now() - timedelta(days=retention_days)
     files = _scan_log_files(log_dir)
@@ -143,34 +142,36 @@ def rotate_today_log(log_dir: Path) -> str:
 
     if today_files:
         today_files.sort(key=lambda x: (x[1], -x[3].stat().st_mtime), reverse=True)
-        _date, max_num, _ext, _oldest_path = today_files[0]
+        _date, max_num, _ext, _max_num_path = today_files[0]
         next_num = max_num + 1
     else:
         next_num = 0
 
     if next_num > 0:
-        old_name = f"{LOG_PREFIX}{today}.{next_num - 1}.log"
-        new_name = f"{LOG_PREFIX}{today}.{next_num}.log"
-        old_path = log_dir / old_name
-        new_path = log_dir / new_name
-        if old_path.exists():
-            old_path.rename(new_path)
+        for i in range(next_num - 1, -1, -1):
+            old_name = f"{LOG_PREFIX}{today}.{i}.log"
+            new_name = f"{LOG_PREFIX}{today}.{i + 1}.log"
+            old_path = log_dir / old_name
+            new_path = log_dir / new_name
+            if old_path.exists():
+                old_path.rename(new_path)
 
     new_file = f"{LOG_PREFIX}{today}.0.log"
     new_path = log_dir / new_file
-
     try:
-        new_path.touch(exist_ok=True)
+        with open(new_path, "w"):
+            pass
     except OSError:
         pass
 
     return new_file
 
 
-def _get_today_log_name(log_dir: Path) -> Optional[str]:
+def _get_today_log_name(log_dir: Path) -> str:
     """
     Get today's current log file name (the .0 file).
-    Returns None if no today file exists.
+
+    Always returns a string; the caller should check if the file exists.
     """
     today = datetime.now().strftime("%Y-%m-%d")
     return f"{LOG_PREFIX}{today}.0.log"
@@ -246,18 +247,14 @@ def setup_logging(
         # Find today's current file
         current_log_name = _get_today_log_name(log_dir)
 
-        if current_log_name is None:
-            # No today file exists - create fresh one
-            current_log_name = f"{LOG_PREFIX}{today}.0.log"
-        else:
-            # Check size of current file
-            current_log_path = log_dir / current_log_name
-            if current_log_path.exists():
-                current_size = current_log_path.stat().st_size
-                if current_size >= max_bytes:
-                    # Rotate and create new file
-                    rotate_today_log(log_dir)
-                    current_log_name = f"{LOG_PREFIX}{today}.0.log"
+        # Check size of current file
+        current_log_path = log_dir / current_log_name
+        if current_log_path.exists():
+            current_size = current_log_path.stat().st_size
+            if current_size >= max_bytes:
+                # Rotate and create new file
+                rotate_today_log(log_dir)
+                current_log_name = f"{LOG_PREFIX}{today}.0.log"
 
         log_file = log_dir / current_log_name
 

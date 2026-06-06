@@ -10,15 +10,11 @@ import base64
 import hashlib
 import time
 import copy
-import urllib3
 import logging
 from pathlib import Path
 from path_handler import PathHandler
 from zip_archive import ZipArchiveManager
 from tex_results import TEX
-
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 
 # seconds_to_wait and max_retries loaded from config in __init__
 
@@ -91,7 +87,9 @@ class TE(object):
         self.config = config
         self.seconds_to_wait = config.seconds_to_wait if config else 10
         self.max_retries = config.max_retries if config else 120
-        # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename, error_basename)
+        self.skip_tls_verify = config.appliance_skip_tls_verify if config else False
+        # zip_config: (zip_path, zip_password, benign_basename, quarantine_basename,
+        #              error_basename, temp_dir)
         # For multiprocessing: passed as tuple since ZipArchiveManager can't be shared across processes
         # For watch mode (single process): can be a ZipArchiveManager instance
         self.zip_config = zip_config
@@ -129,7 +127,7 @@ class TE(object):
         sha1 = hashlib.sha1()
         with open(str(self.full_path), "rb") as f:
             while True:
-                block = f.read(2**10)  # One-kilobyte blocks
+                block = f.read(65536)
                 if not block:
                     break
                 sha1.update(block)
@@ -155,8 +153,8 @@ class TE(object):
         """
         try:
             self.report_id = response["response"][0]["te"]["summary_report"]
-        except Exception as E:
-            self.logger.error("Could not get TE report id, failure: {}. ".format(E))
+        except Exception as e:
+            self.logger.error("Could not get TE report id, failure: {}".format(e))
 
     def create_response_info(self, response):
         """
@@ -185,7 +183,7 @@ class TE(object):
                 self.log_path
             )
         )
-        response = requests.post(url=self.url + "query", data=data, verify=False)
+        response = requests.post(url=self.url + "query", data=data, verify=not self.skip_tls_verify, timeout=30)
         response_j = response.json()
         return response_j
 
@@ -203,18 +201,23 @@ class TE(object):
             with open(str(self.full_path), "rb") as f:
                 curr_file = {"request": data, "file": f}
                 response = requests.post(
-                    url=self.url + "upload", files=curr_file, verify=False
+                    url=self.url + "upload", files=curr_file, verify=not self.skip_tls_verify, timeout=30
                 )
-        except Exception as E:
-            self.logger.error("Upload file failed: {}".format(E))
+        except Exception as e:
+            self.logger.error("Upload file failed: {}".format(e))
             self.move_file(self.error_directory)
-            raise
+            raise RuntimeError("Upload failed: {}".format(e)) from e
         response_j = response.json()
-        self.logger.info(
-            "{} - te and te_eb Upload response status : {}".format(
-                self.log_path, response_j["response"][0]["status"]["label"]
+        try:
+            self.logger.info(
+                "{} - te and te_eb Upload response status : {}".format(
+                    self.log_path, response_j["response"][0]["status"]["label"]
+                )
             )
-        )
+        except (KeyError, IndexError):
+            self.logger.warning(
+                "{} - Unexpected upload response structure".format(self.log_path)
+            )
         return response_j
 
     def query_file(self):
@@ -244,16 +247,28 @@ class TE(object):
             self.logger.debug(
                 "{} - Sending Query request of te and te_eb".format(self.log_path)
             )
-            response = requests.post(url=self.url + "query", data=data, verify=False)
+            response = requests.post(url=self.url + "query", data=data, verify=not self.skip_tls_verify, timeout=30)
             response_j = response.json()
-            status_label = response_j["response"][0]["status"]["label"]
+            try:
+                status_label = response_j["response"][0]["status"]["label"]
+            except (KeyError, IndexError) as e:
+                self.logger.warning(
+                    "{} - Unexpected query response structure: {}".format(self.log_path, e)
+                )
+                break
             if (status_label != "PENDING") and (status_label != "PARTIALLY_FOUND"):
                 break
             if status_label == "PARTIALLY_FOUND":
                 if not te_eb_found:
-                    te_eb_status_label = response_j["response"][0]["te_eb"]["status"][
-                        "label"
-                    ]
+                    try:
+                        te_eb_status_label = response_j["response"][0]["te_eb"]["status"][
+                            "label"
+                        ]
+                    except (KeyError, IndexError) as e:
+                        self.logger.warning(
+                            "{} - Unexpected te_eb status in response: {}".format(self.log_path, e)
+                        )
+                        break
                     if te_eb_status_label == "FOUND":
                         te_eb_found = True
                         te_eb_verdict = self.parse_verdict(response_j, "te_eb")
@@ -266,14 +281,26 @@ class TE(object):
                                     self.log_path
                                 )
                             )
-                te_status_label = response_j["response"][0]["te"]["status"]["label"]
+                try:
+                    te_status_label = response_j["response"][0]["te"]["status"]["label"]
+                except (KeyError, IndexError) as e:
+                    self.logger.warning(
+                        "{} - Unexpected te status in response: {}".format(self.log_path, e)
+                    )
+                    break
                 if (te_status_label == "FOUND") or (te_status_label == "NOT_FOUND"):
                     break
                 elif te_status_label == "PARTIALLY_FOUND":
-                    te_images_j_arr = response_j["response"][0]["te"]["images"]
+                    try:
+                        te_images_j_arr = response_j["response"][0]["te"]["images"]
+                    except (KeyError, IndexError) as e:
+                        self.logger.warning(
+                            "{} - Unexpected te images in response: {}".format(self.log_path, e)
+                        )
+                        break
                     no_pending_image = True
                     for image_j in te_images_j_arr:
-                        if image_j["status"] == "pending":
+                        if image_j.get("status", "") == "pending":
                             no_pending_image = False
                             break
                     if no_pending_image:
@@ -303,7 +330,7 @@ class TE(object):
                 "{} - Sending Download request for TE report".format(self.log_path)
             )
             response = requests.get(
-                url=self.url + "download?id=" + self.report_id, verify=False
+                url=self.url + "download?id=" + self.report_id, verify=not self.skip_tls_verify, timeout=30
             )
             encoded_content_string = response.text
             decoded_content = base64.b64decode(encoded_content_string)
@@ -323,9 +350,9 @@ class TE(object):
             self.logger.debug(
                 "TE report downloaded to: {}".format(decoded_report_archive_path)
             )
-        except Exception as E:
+        except Exception as e:
             self.logger.error(
-                "{} - Downloading TE report failed:  {} ".format(self.log_path, E)
+                "{} - Downloading TE report failed:  {}".format(self.log_path, e)
             )
 
     def _setup_tex_directories(self, config):
@@ -340,19 +367,6 @@ class TE(object):
         )
         self.tex_response_info_dir.mkdir(parents=True, exist_ok=True)
         self.tex_clean_files_dir.mkdir(parents=True, exist_ok=True)
-
-    def _calculate_md5(self):
-        """
-        Calculate and return the file's md5 hash.
-        """
-        md5 = hashlib.md5()
-        with open(str(self.full_path), "rb") as f:
-            while True:
-                block = f.read(2**10)
-                if not block:
-                    break
-                md5.update(block)
-        return md5.hexdigest()
 
     def _upload_for_tex(self, config):
         """
@@ -387,9 +401,6 @@ class TE(object):
             self.logger.info(
                 f"{self.log_path} - Uploading to TPAPI for TEX processing: {self.url_tex}"
             )
-
-            md5 = self._calculate_md5()
-            self.logger.debug(f"{self.log_path} - File MD5: {md5}")
 
             # Use configured scrubbed parts codes
             scrubbed_parts = (
@@ -460,24 +471,24 @@ class TE(object):
                     url=self.url_tex,
                     data=data,
                     headers={"Content-Type": "application/json"},
-                    verify=False,
+                    verify=not self.skip_tls_verify,
                     timeout=300,
                 )
                 self.logger.info(
                     f"TEX upload response received for {self.log_path} (status {response.status_code})"
                 )
-            except Exception as E:
+            except Exception as e:
                 self.logger.error(
-                    f"TEX upload request failed for {self.log_path}: {E}", exc_info=True
+                    f"TEX upload request failed for {self.log_path}: {e}", exc_info=True
                 )
                 return None
 
             response_j = response.json()
             return response_j
 
-        except Exception as E:
+        except Exception as e:
             self.logger.error(
-                f"TEX upload preparation failed for {self.log_path}: {E}", exc_info=True
+                f"TEX upload preparation failed for {self.log_path}: {e}", exc_info=True
             )
             return None
 
@@ -540,8 +551,8 @@ class TE(object):
                     f"TEX processed but found nothing to remove: {self.log_path}"
                 )
 
-        except Exception as E:
-            self.logger.warning(f"TEX processing failed for {self.log_path}: {E}")
+        except Exception as e:
+            self.logger.warning(f"TEX processing failed for {self.log_path}: {e}")
             # TEX errors are non-blocking - continue with TE processing
 
     def handle_file(self):
@@ -549,7 +560,10 @@ class TE(object):
         (Function description is within above class description)
         """
         query_cache_response = self.check_te_cache()
-        cache_status_label = query_cache_response["response"][0]["status"]["label"]
+        try:
+            cache_status_label = query_cache_response["response"][0]["status"]["label"]
+        except (KeyError, IndexError):
+            cache_status_label = "NOT_FOUND"
         if cache_status_label == "FOUND":
             self.logger.debug(
                 "{} - Results already exist in TE cache".format(self.log_path)
@@ -561,10 +575,19 @@ class TE(object):
                 "{} - No results in TE cache before upload".format(self.log_path)
             )
             upload_response = self.upload_file()
-            upload_status_label = upload_response["response"][0]["status"]["label"]
+            try:
+                upload_status_label = upload_response["response"][0]["status"]["label"]
+            except (KeyError, IndexError):
+                upload_status_label = "UNKNOWN"
             if upload_status_label == "UPLOAD_SUCCESS":
                 query_response = self.query_file()
-                query_status_label = query_response["response"][0]["status"]["label"]
+                try:
+                    query_status_label = query_response["response"][0]["status"]["label"]
+                except (KeyError, IndexError) as e:
+                    self.logger.warning(
+                        "{} - Unexpected query_file response: {}".format(self.log_path, e)
+                    )
+                    query_status_label = "UNKNOWN"
                 self.logger.debug(
                     "{} - Receiving Query response with te results. status: {}".format(
                         self.log_path, query_status_label
@@ -585,12 +608,12 @@ class TE(object):
             self.logger.debug("{} - move_file called".format(self.log_path))
             verdict = self.parse_verdict(self.final_response, "te")
 
-            self.logger.info(
+            self.logger.debug(
                 f"{self.log_path} - [ZIP] verdict={verdict}, dirs: benign={self.benign_directory!r} quarantine={self.quarantine_directory!r} error={self.error_directory!r}"
             )
             if verdict == "Malicious":
                 basename = self.quarantine_directory.name
-                self.logger.info(
+                self.logger.debug(
                     f"{self.log_path} - [ZIP] Malicious: basename={basename!r}"
                 )
                 self._add_to_zip(basename)
@@ -600,14 +623,14 @@ class TE(object):
                     self.download_report()
             elif verdict == "Benign":
                 basename = self.benign_directory.name
-                self.logger.info(
+                self.logger.debug(
                     f"{self.log_path} - [ZIP] Benign: basename={basename!r}"
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
             elif verdict == "Error":
                 basename = self.error_directory.name
-                self.logger.info(
+                self.logger.debug(
                     f"{self.log_path} - [ZIP] Error: basename={basename!r}"
                 )
                 self._add_to_zip(basename)

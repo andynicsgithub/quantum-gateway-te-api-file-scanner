@@ -7,7 +7,7 @@ te_api v11.2 (alpha)
 from te_file_handler import TE
 from config_manager import ScannerConfig
 from path_handler import PathHandler
-from logger_config import setup_logging
+from logger_config import setup_logging, rotate_today_log, cleanup_old_logs
 from zip_archive import ZipArchiveManager
 from safe_filename import sanitize_filename
 import os
@@ -80,7 +80,31 @@ def main():
     )
     parser.add_argument("-ip", "--appliance_ip", help="the appliance ip address")
     parser.add_argument(
+        "--appliance-skip-tls-verify",
+        action="store_true",
+        default=None,
+        const=True,
+        help="Skip TLS certificate verification for TE appliance (default: false, enable for self-signed certs)",
+    )
+    parser.add_argument(
+        "--no-appliance-skip-tls-verify",
+        action="store_false",
+        default=None,
+        dest="appliance_skip_tls_verify",
+        help="Explicitly disable TLS skip verification (overrides config.ini)",
+    )
+    parser.add_argument(
         "-n", "--concurrency", type=int, help="Number of concurrent file processes"
+    )
+    parser.add_argument(
+        "--seconds-to-wait",
+        type=int,
+        help="Seconds to wait between TE query retries (default: from config)",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        help="Maximum number of TE query retries (default: from config)",
     )
     parser.add_argument(
         "-out",
@@ -154,6 +178,11 @@ def main():
     )
     parser.add_argument(
         "--email-imap-use-ssl", action="store_true", help="Use SSL for IMAP connection"
+    )
+    parser.add_argument(
+        "--email-imap-skip-tls-verify",
+        action="store_true",
+        help="Skip TLS certificate verification for IMAP connection (use with self-signed certs)",
     )
     parser.add_argument("--email-imap-username", help="IMAP authentication username")
     parser.add_argument(
@@ -330,20 +359,10 @@ def main():
                 stream.flush()
 
         # End-of-run: rotate if over size limit, cleanup old files
-        from logger_config import rotate_today_log, cleanup_old_logs
-
         rotate_today_log(config.log_dir)
         cleanup_old_logs(config.log_dir, config.log_retention_days)
 
     return 0
-
-
-def _file_display_path(file_name, sub_dir):
-    """
-    Return a display-friendly path for logging purposes.
-    Uses PathHandler.display_path for consistent formatting.
-    """
-    return PathHandler.display_path(file_name, sub_dir)
 
 
 def discover_files(input_directory, config):
@@ -533,6 +552,54 @@ def find_and_delete_empty_subdirectories(input_directory):
                     logger.warning(f"Error deleting directory {dir_path}: {str(e)}")
 
 
+def process_single_file(file_name, safe_file_name, sub_dir, full_path, config, url, url_tex, zip_config):
+    """
+    Process a single file through the TE API and return result dict.
+
+    Shared core logic used by both one-shot mode (via process_files)
+    and watch mode (via process_batch_callback).
+
+    Args:
+        zip_config: ZipArchiveManager instance (single-process mode) or tuple
+            (multiprocessing mode).
+
+    Returns:
+        dict with keys: name, path, verdict, status, tex_status
+    """
+    te = TE(
+        url,
+        url_tex,
+        file_name,
+        safe_file_name,
+        sub_dir,
+        full_path,
+        config.input_directory,
+        config.reports_directory,
+        config.benign_directory,
+        config.quarantine_directory,
+        config.error_directory,
+        tex_api_key=config.tex_api_key,
+        zip_config=zip_config,
+        config=config,
+    )
+    te.handle_file()
+
+    result = {
+        "name": file_name,
+        "path": sub_dir if sub_dir else "",
+        "verdict": "Unknown",
+        "status": "success",
+        "tex_status": te._tex_status,
+    }
+
+    if te.final_status_label == "FOUND":
+        result["verdict"] = te.parse_verdict(te.final_response, "te")
+    else:
+        result["verdict"] = te.final_status_label if te.final_status_label else "Not_Found"
+
+    return result
+
+
 def process_files(
     file_name,
     safe_file_name,
@@ -544,23 +611,10 @@ def process_files(
     zip_config=None,
 ):
     """
-    Process a single file through the TE API.
+    Process a single file through the TE API (multiprocessing worker entry point).
 
-    Args:
-        file_name: Real name of the file (used for local filesystem ops, logging)
-        safe_file_name: UTF-8-safe name (used for API calls)
-        sub_dir: Subdirectory relative to input_directory
-        full_path: Full path to the file
-        config: ScannerConfig object
-        url: TE API URL
-        url_tex: TEX API URL (may be empty if TEX disabled)
-        zip_config: ZipArchiveManager instance (single-process mode) or tuple of
-            (zip_path, zip_password, benign_basename, quarantine_basename, error_basename, temp_dir)
-
-    Returns:
-        dict with keys: 'name', 'path', 'verdict', 'status'
+    Initializes logging for worker processes, then delegates to process_single_file().
     """
-    # Initialize logging for this worker process (needed for Windows spawn)
     setup_logging(
         log_dir=config.log_dir,
         log_level=getattr(logging, config.log_level.upper()),
@@ -569,50 +623,22 @@ def process_files(
     )
 
     logger = logging.getLogger("te_scanner.main")
-    result = {
-        "name": file_name,
-        "path": sub_dir if sub_dir else "",
-        "verdict": "Unknown",
-        "status": "error",
-    }
     try:
-        logger.debug(
-            f"Handling file: {_file_display_path(file_name, sub_dir)} (zip_config type={type(zip_config).__name__})"
+        result = process_single_file(
+            file_name, safe_file_name, sub_dir, full_path,
+            config, url, url_tex, zip_config,
         )
-        te = TE(
-            url,
-            url_tex,
-            file_name,
-            safe_file_name,
-            sub_dir,
-            full_path,
-            config.input_directory,
-            config.reports_directory,
-            config.benign_directory,
-            config.quarantine_directory,
-            config.error_directory,
-            tex_api_key=config.tex_api_key,
-            zip_config=zip_config,
-            config=config,
-        )
-        te.handle_file()
-
-        result["tex_status"] = te._tex_status
-
-        if te.final_status_label == "FOUND":
-            verdict = te.parse_verdict(te.final_response, "te")
-            result["verdict"] = verdict
-            result["status"] = "success"
-        else:
-            result["verdict"] = (
-                te.final_status_label if te.final_status_label else "Not_Found"
-            )
-            result["status"] = "success"
-    except Exception as E:
+    except Exception as e:
         logger.error(
-            f"Could not handle file: {_file_display_path(file_name, sub_dir)} because: {E}. Continue to handle the next file."
+            f"Could not handle file: {PathHandler.display_path(file_name, sub_dir)} because: {e}. Continue to handle the next file."
         )
-        result["status"] = "error"
+        result = {
+            "name": file_name,
+            "path": sub_dir if sub_dir else "",
+            "verdict": "Unknown",
+            "status": "error",
+            "tex_status": None,
+        }
 
     return result
 

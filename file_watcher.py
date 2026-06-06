@@ -20,6 +20,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
 from path_handler import PathHandler
+from te_api import process_single_file
 
 
 class CopyCompletionWatcher(FileSystemEventHandler):
@@ -117,18 +118,19 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             file_path = str(Path(event.src_path).resolve())
             self.logger.info(f"[WATCHER] on_modified: {file_path}")
 
-            if file_path in self.pending_files:
-                with self._lock:
-                    old_size = self.pending_files[file_path]["size"]
-                    self.pending_files[file_path]["last_modified"] = time.time()
-                    new_size = os.path.getsize(file_path)
-                    self.pending_files[file_path]["size"] = new_size
-                self.logger.info(
-                    f"[WATCHER] File growing: {file_path} ({old_size} → {new_size} bytes)"
-                )
+            with self._lock:
+                if file_path not in self.pending_files:
+                    return
+                old_size = self.pending_files[file_path]["size"]
+                self.pending_files[file_path]["last_modified"] = time.time()
+                new_size = os.path.getsize(file_path)
+                self.pending_files[file_path]["size"] = new_size
+            self.logger.info(
+                f"[WATCHER] File growing: {file_path} ({old_size} → {new_size} bytes)"
+            )
 
-                # Check if this file might be done copying
-                self._check_batch_ready()
+            # Check if this file might be done copying
+            self._check_batch_ready()
 
         except Exception as e:
             self.logger.error(
@@ -150,14 +152,15 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             file_path = str(Path(event.src_path).resolve())
             self.logger.info(f"[WATCHER] on_closed: {file_path}")
 
-            if file_path in self.pending_files:
-                with self._lock:
-                    self.pending_files[file_path]["closed"] = True
-                    self.pending_files[file_path]["last_modified"] = time.time()
-                self.logger.info(f"[WATCHER] File closed (copy complete): {file_path}")
+            with self._lock:
+                if file_path not in self.pending_files:
+                    return
+                self.pending_files[file_path]["closed"] = True
+                self.pending_files[file_path]["last_modified"] = time.time()
+            self.logger.info(f"[WATCHER] File closed (copy complete): {file_path}")
 
-                # Check if we should trigger batch immediately (single file, no delay)
-                self._check_batch_ready()
+            # Check if we should trigger batch immediately (single file, no delay)
+            self._check_batch_ready()
 
         except Exception as e:
             self.logger.error(
@@ -235,13 +238,6 @@ class CopyCompletionWatcher(FileSystemEventHandler):
                             "size": os.path.getsize(path),
                         }
 
-    def _trigger_stale_batch(self, stale_files):
-        """
-        Legacy method — no longer used (race condition fixed in _check_batch_ready).
-        Kept for backward compatibility if external callers reference it.
-        """
-        pass
-
     def get_pending_count(self):
         """Return number of files currently pending."""
         return len(self.pending_files)
@@ -308,7 +304,6 @@ def start_watching(config, url, url_tex=""):
     # Define batch processing callback
     def process_batch_callback(file_paths):
         """Process a batch of files."""
-        from te_file_handler import TE
         from path_handler import PathHandler
         from notification import send_batch_notification
         from zip_archive import ZipArchiveManager
@@ -346,77 +341,40 @@ def start_watching(config, url, url_tex=""):
                 batch_logger.warning(f"File no longer exists: {file_path}")
                 continue
 
-            # Initialize for except handler (B3: prevent NameError if sanitize_filename fails before sub_dir assignment)
+            # Initialize for except handler (prevent NameError if Path() fails before file_obj assignment)
             sub_dir = ""
             file_name = file_path
+            file_obj = None
 
             try:
-                # Extract file info
                 file_obj = Path(file_path)
                 file_name = file_obj.name
                 safe_file_name = sanitize_filename(file_name, seen)
                 sub_dir = str(file_obj.parent.relative_to(config.input_directory))
                 full_path = str(file_obj)
 
-                # Handle root directory case
                 if sub_dir == ".":
                     sub_dir = ""
 
                 display_path = PathHandler.display_path(file_name, sub_dir)
                 batch_logger.info(f"Processing: {display_path}")
 
-                # Create TE instance and process
-                te = TE(
-                    url,
-                    url_tex,
-                    file_name,
-                    safe_file_name,
-                    sub_dir,
-                    full_path,
-                    config.input_directory,
-                    config.reports_directory,
-                    config.benign_directory,
-                    config.quarantine_directory,
-                    config.error_directory,
-                    tex_api_key=config.tex_api_key,
-                    zip_config=batch_zip_mgr if batch_zip_mgr else None,
-                    config=config,
+                result = process_single_file(
+                    file_name, safe_file_name, sub_dir, full_path,
+                    config, url, url_tex,
+                    batch_zip_mgr,
                 )
-                te.handle_file()
 
-                # Track results
+                batch_summary["all_files"].append(result)
                 batch_summary["processed"] += 1
 
-                if te.final_status_label == "FOUND":
-                    verdict = te.parse_verdict(te.final_response, "te")
-                    batch_summary["all_files"].append(
-                        {
-                            "name": file_name,
-                            "path": sub_dir if sub_dir else "",
-                            "verdict": verdict,
-                            "tex_status": te._tex_status,
-                        }
-                    )
-                    if verdict == "Malicious":
-                        batch_summary["malicious"] += 1
-                        batch_summary["malicious_files"].append(
-                            {"name": file_name, "verdict": verdict}
-                        )
-                    elif verdict == "Benign":
-                        batch_summary["benign"] += 1
-                    elif verdict == "Error":
-                        batch_summary["error"] += 1
-                else:
-                    batch_summary["all_files"].append(
-                        {
-                            "name": file_name,
-                            "path": sub_dir if sub_dir else "",
-                            "verdict": te.final_status_label
-                            if te.final_status_label
-                            else "Not_Found",
-                            "tex_status": te._tex_status,
-                        }
-                    )
+                verdict = result["verdict"]
+                if verdict == "Malicious":
+                    batch_summary["malicious"] += 1
+                    batch_summary["malicious_files"].append({"name": file_name, "verdict": verdict})
+                elif verdict == "Benign":
+                    batch_summary["benign"] += 1
+                elif verdict == "Error":
                     batch_summary["error"] += 1
 
             except Exception as e:
@@ -432,8 +390,9 @@ def start_watching(config, url, url_tex=""):
                 )
                 # Try to move to error directory manually
                 try:
-                    error_path = config.error_directory / file_obj.name
-                    PathHandler.safe_move(file_path, error_path)
+                    if file_obj is not None:
+                        error_path = config.error_directory / sub_dir / file_obj.name
+                        PathHandler.safe_move(file_path, error_path)
                     display = f"{sub_dir}/{file_name}" if sub_dir else file_name
                     batch_logger.info(f"Moved {display} to error directory")
                 except Exception as move_error:
