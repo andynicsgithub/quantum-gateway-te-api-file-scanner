@@ -1,4 +1,5 @@
 # TE API Scanner Dependencies
+# Minimum Python version: 3.9 (required for set[str], set[int] type annotations)
 
 # HTTP client for TE API
 requests>=2.31.0

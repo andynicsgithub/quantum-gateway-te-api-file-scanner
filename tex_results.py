@@ -45,8 +45,12 @@ class CpExtractResult(Enum):
 def return_relevant_enum(status):
     """
     Convert a TEX status code to its named enum value.
+    Returns a fallback string for unknown status codes.
     """
-    return CpExtractResult(status).name
+    try:
+        return CpExtractResult(status).name
+    except ValueError:
+        return "unknown_status_{}".format(status)
 
 
 class TEX(object):
@@ -108,6 +112,13 @@ class TEX(object):
         Returns:
             Path to the created cleaned file
         """
+        if not self.clean_file_data:
+            self.logger.warning(
+                "No clean file data available for {}, skipping cleaned file creation".format(self.log_path)
+            )
+            self._fallback_filename()
+            return None
+
         text = base64.b64decode(self.clean_file_data)
 
         # Try to get the full cleaned filename from the API response first
@@ -173,8 +184,8 @@ class TEX(object):
         """
         try:
             scrub_response = response["response"][0]["scrub"]
-        except (KeyError, IndexError) as E:
-            self.logger.error(f"No scrub data in response for {self.log_path}: {E}")
+        except (KeyError, IndexError) as e:
+            self.logger.error(f"No scrub data in response for {self.log_path}: {e}")
             return False
 
         # Check if file was cleaned (empty file_enc_data means not cleaned)

@@ -16,7 +16,7 @@ Usage:
 Configuration:
     The service runs te_api.py --watch with optional command-line arguments.
     Configure using sc config:
-    sc config TEWatcher binPath= "C:\Python\python.exe C:\te_api\service_wrapper.py --watch --ip 10.2.46.85"
+    sc config TEWatcher binPath= "py.exe C:\te_api\service_wrapper.py --watch --ip <appliance-ip>"
 
 Security:
     - Runs as Network Service by default (limited privileges)
@@ -98,6 +98,11 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             # Import te_api and run main with watch mode
             # We modify sys.argv to simulate command-line arguments
             import te_api
+            import sys
+
+            # Ensure --watch is in sys.argv so the service always runs in watch mode
+            if "--watch" not in sys.argv:
+                sys.argv.append("--watch")
 
             # Run main - this will enter watch mode and block until stopped
             # The SvcStop handler will set the event and return

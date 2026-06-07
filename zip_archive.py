@@ -115,7 +115,7 @@ class ZipArchiveManager:
 
         Args:
             temp_dir: Path to temp directory containing copies organized as {verdict}/{subdir}/{file}
-            verdict_basenames: List of (verdict_basename, benign_basename, quarantine_basename, error_basename)
+            verdict_basenames: List of verdict name strings (e.g. ['benign', 'quarantine', 'error'])
             password: Password for the zip archive
         """
         if self._zip_file is None:

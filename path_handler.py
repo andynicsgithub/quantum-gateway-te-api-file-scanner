@@ -295,7 +295,7 @@ class PathHandler:
         sha = hashlib.sha256()
         with open(file_path, "rb") as f:
             while True:
-                block = f.read(2**10)  # 1KB blocks
+                block = f.read(65536)
                 if not block:
                     break
                 sha.update(block)

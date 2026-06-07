@@ -35,6 +35,10 @@ logs/
 AGENTS.md
 CLAUDE.md
 
+# Agent session files
+RECAP.md
+ROADMAP.md
+
 # IDE and editor files
 .idea/
 .vscode/
