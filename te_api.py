@@ -18,6 +18,15 @@ import logging
 from pathlib import Path
 from functools import partial
 from datetime import datetime
+import warnings
+
+# Silence only the specific urllib3 TLS verification warning
+# (keeps deprecation warnings and other urllib3 messages visible)
+warnings.filterwarnings(
+    "ignore",
+    message="Unverified HTTPS request is being made",
+    module="urllib3.connectionpool",
+)
 
 # =======================
 # Utility Functions

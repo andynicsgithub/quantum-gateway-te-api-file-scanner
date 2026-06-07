@@ -244,7 +244,7 @@ class TE(object):
             or (status_label == "PENDING")
             or (status_label == "PARTIALLY_FOUND")
         ):
-            self.logger.debug(
+            self.logger.info(
                 "{} - Sending Query request of te and te_eb".format(self.log_path)
             )
             response = requests.post(url=self.url + "query", data=data, verify=not self.skip_tls_verify, timeout=30)
