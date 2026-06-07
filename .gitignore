@@ -34,6 +34,7 @@ logs/
 # Agent/LLM config files
 AGENTS.md
 CLAUDE.md
+report.md
 
 # Agent session files
 RECAP.md
