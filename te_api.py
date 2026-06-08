@@ -102,6 +102,13 @@ def main():
         help="Explicitly disable TLS skip verification (overrides config.ini)",
     )
     parser.add_argument(
+        "--no-save-response-info",
+        action="store_false",
+        default=None,
+        dest="save_response_info",
+        help="Disable saving API response transcripts (TE and TEX) to reports_directory",
+    )
+    parser.add_argument(
         "-n", "--concurrency", type=int, help="Number of concurrent file processes"
     )
     parser.add_argument(

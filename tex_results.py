@@ -74,11 +74,13 @@ class TEX(object):
         output_folder_tex_response_info,
         output_folder_tex_clean_files,
         log_path=None,
+        save_response_info=True,
     ):
         self.file_name = file_name
         self.log_path = log_path if log_path else file_name
         self.output_folder_tex_response_info = Path(output_folder_tex_response_info)
         self.output_folder_tex_clean_files = Path(output_folder_tex_clean_files)
+        self.save_response_info = save_response_info
         self.clean_file_data = ""
         self.clean_file_name = ""
         self.scrub_result = -1
@@ -198,7 +200,7 @@ class TEX(object):
         self.clean_file_data = scrub_response.get("file_enc_data", "")
 
         # Build response filename
-        response_filename = f"{self.file_name}.response.txt"
+        response_filename = f"{self.file_name}.TEX.response.txt"
         output_path = self.output_folder_tex_response_info / response_filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -215,7 +217,8 @@ class TEX(object):
             f"TEX Upload response: {json.dumps(scrub_response_copy, indent=2)}"
         )
 
-        with open(output_path, "w") as file:
-            file.write(json.dumps(scrub_response_copy, indent=2))
+        if self.save_response_info:
+            with open(output_path, "w") as file:
+                file.write(json.dumps(scrub_response_copy, indent=2))
 
         return is_cleaned

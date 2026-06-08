@@ -83,6 +83,8 @@ class ScannerConfig:
     tex_supported_file_types: Set[str] = field(default_factory=set)
     tex_scrubbed_parts_codes: Set[int] = field(default_factory=set)
 
+    save_response_info: bool = True
+
     # Logging configuration
     log_level: str = "INFO"
     log_dir: Path = field(default_factory=lambda: Path("logs"))
@@ -228,6 +230,7 @@ class ScannerConfig:
             "tex_supported_file_types": set(),
             "tex_scrubbed_parts_codes": set(),
             "archive_extensions": set(),
+            "save_response_info": True,
         }
 
         # 2. Override with environment variables
@@ -262,6 +265,7 @@ class ScannerConfig:
                     "email_imap_skip_tls_verify",
                     "appliance_skip_tls_verify",
                     "tex_enabled",
+                    "save_response_info",
                 ]:
                     config_data[key] = value.lower() in ["true", "1", "yes", "on"]
                 else:
@@ -440,12 +444,14 @@ class ScannerConfig:
             # (cli_attr, config_key) mappings — applies getattr(cli_args, attr) if truthy
             _cli_override_keys = {
                 "appliance_skip_tls_verify",  # bool with default=None → use "is not None"
+                "save_response_info",  # bool with default=None → use "is not None"
             }
             _cli_mappings = [
                 ("input_directory", "input_directory"),
                 ("reports_directory", "reports_directory"),
                 ("appliance_ip", "appliance_ip"),
                 ("appliance_skip_tls_verify", "appliance_skip_tls_verify"),
+                ("save_response_info", "save_response_info"),
                 ("benign_directory", "benign_directory"),
                 ("quarantine_directory", "quarantine_directory"),
                 ("error_directory", "error_directory"),
@@ -553,6 +559,7 @@ class ScannerConfig:
             "watch_mode",
             "appliance_skip_tls_verify",
             "tex_enabled",
+            "save_response_info",
             "email_enabled",
             "email_use_tls",
             "email_skip_tls_verify",

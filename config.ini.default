@@ -92,6 +92,9 @@ log_dir = ./logs
 max_log_size_mb = 10
 log_retention_days = 90
 
+# Save API response transcripts to reports_directory (TE + TEX). Set to false to disable.
+save_response_info = true
+
 [TEX]
 tex_enabled = false
 tex_url =

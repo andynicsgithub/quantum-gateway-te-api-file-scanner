@@ -163,7 +163,7 @@ class TE(object):
         """
         output_path = self.reports_directory / self.sub_dir
         output_path.mkdir(parents=True, exist_ok=True)
-        output_file = output_path / (self.file_name + ".response.txt")
+        output_file = output_path / (self.file_name + ".TE.response.txt")
         with open(str(output_file), "w") as file:
             file.write(json.dumps(response, indent=4))
 
@@ -538,6 +538,7 @@ class TE(object):
                 self.tex_response_info_dir,
                 self.tex_clean_files_dir,
                 self.log_path,
+                save_response_info=self.config.save_response_info,
             )
             is_cleaned = tex.process_results(upload_response)
             if is_cleaned:
@@ -598,7 +599,8 @@ class TE(object):
             else:
                 self.final_response = upload_response
                 self.final_status_label = upload_status_label
-        self.create_response_info(self.final_response)
+        if self.config.save_response_info:
+            self.create_response_info(self.final_response)
 
         # Process TEX via separate TPAPI upload (independent of TE Cloud flow)
         if self.url_tex and self.tex_api_key and self.config.tex_enabled:
@@ -609,8 +611,13 @@ class TE(object):
             verdict = self.parse_verdict(self.final_response, "te")
 
             self.logger.debug(
-                f"{self.log_path} - [ZIP] verdict={verdict}, dirs: benign={self.benign_directory!r} quarantine={self.quarantine_directory!r} error={self.error_directory!r}"
+                f"{self.log_path} - [ZIP] verdict={verdict}"
             )
+            # Deliberately structured as if/elif branches (not refactored into a
+            # loop + dict mapping). The three branches differ only in verdict
+            # name, target directory, and the Malicious branch has extra steps
+            # (parse + download report). The explicit form is clearer than
+            # adding indirection for marginal DRY gain.
             if verdict == "Malicious":
                 basename = self.quarantine_directory.name
                 self.logger.debug(

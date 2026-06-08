@@ -201,15 +201,24 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             if self.min_batch > 0 and len(self.pending_files) < self.min_batch:
                 return
 
-            # Find files that are "stale" (no modification for batch_delay seconds)
-            stale_files = {}
-            if self.max_batch > 0 and len(self.pending_files) >= self.max_batch:
-                stale_files = dict(self.pending_files)
+            # Collect files ready for dispatch.
+            # Default path: only stale files (no modification for batch_delay).
+            # max_batch path: files that are closed OR stale (avoids mid-copy dispatch
+            # while preserving the staleness fallback for platforms where on_closed
+            # doesn't fire, e.g. Windows).
+            dispatchable = {}
+            for file_path, info in self.pending_files.items():
+                time_since_last_modified = now - info["last_modified"]
+                is_closed = info.get("closed", False)
+                is_stale = time_since_last_modified >= self.batch_delay
+                if is_closed or is_stale:
+                    dispatchable[file_path] = info
+
+            if self.max_batch > 0:
+                file_paths = list(dispatchable.keys())[:self.max_batch]
+                stale_files = {p: dispatchable[p] for p in file_paths}
             else:
-                for file_path, info in self.pending_files.items():
-                    time_since_last_modified = now - info["last_modified"]
-                    if time_since_last_modified >= self.batch_delay:
-                        stale_files[file_path] = info
+                stale_files = dispatchable
 
             if not stale_files:
                 return
