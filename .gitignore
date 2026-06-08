@@ -36,6 +36,11 @@ AGENTS.md
 CLAUDE.md
 report.md
 ROADMAP.md
+.opencode/
+graphify-out/
+RECAP.md
+REPORT.md
+ziplogic.md
 
 # IDE and editor files
 .idea/
