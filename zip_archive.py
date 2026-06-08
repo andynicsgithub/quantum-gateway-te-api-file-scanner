@@ -15,6 +15,9 @@ import logging
 from pathlib import Path
 from path_handler import PathHandler
 
+# Module-level logger for use in static methods
+logger = logging.getLogger("te_scanner.zip_archive")
+
 
 class ZipArchiveManager:
     """
@@ -180,8 +183,8 @@ class ZipArchiveManager:
         if self._zip_file is not None:
             try:
                 self._zip_file.close()
-            except Exception:
-                pass
+            except Exception as e:
+                self.logger.warning(f"Error closing zip archive in abort: {e}")
 
         if self.zip_path.exists():
             try:
@@ -203,5 +206,6 @@ class ZipArchiveManager:
                 return f"{size / 1024:.1f} KB"
             else:
                 return f"{size / (1024 * 1024):.1f} MB"
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Error getting archive size for {zip_path}: {e}")
             return "unknown size"

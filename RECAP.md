@@ -23,3 +23,18 @@
 ## /RECAP - 2026-06-08_07:40
 
 - Addressed code review issue S14 (verdict branch duplication, te_file_handler.py:610–630): documented as deliberate decision with comment to prevent future unnecessary refactoring
+
+## /RECAP - 2026-06-08_12:00
+
+- Reviewed ROADMAP.md: confirmed W10 (stale_files mid-batch race) is fixed, only outstanding item is zip file logic review
+- Updated ROADMAP.md line 8: changed "issues to consider: W10" to "W10 fixed"
+- Created `ziplogic.md` documenting zip archive logic flow and identified issues
+- Issue 1: `/jail/...` vs `jail/...` — `sub_dir` built with `Path.relative_to()` can produce backslashes on Windows, creating mixed separators and duplicate entries in zip
+- Issue 2: `verdict_basename` empty warnings on benign files — NOT_FOUND files skip zip entirely, no record created
+- Issue 3: Consolidation path normalization — `add_file()` and `_consolidate_dir()` build paths differently, could diverge on Windows
+- Issue 4: All files should be included in archive — files with `final_status_label != "FOUND"` (NOT_FOUND, UNKNOWN, PENDING) are skipped entirely
+- Issue 5: NOT_FOUND after analysis should be treated as error case — if uploaded/analyzed but returns NOT_FOUND instead of FOUND+Benign, treat as anomalous
+- Discussed Error verdict handling: files with verdict="Error" but status != "FOUND" are silently abandoned
+- Discussed timeout behavior (NOT_FOUND/PENDING after max retries): files are left in place, no zip record, no move — acceptable per user
+- Implemented fix: moved `verdict = parse_verdict()` outside the `FOUND` check so Error verdict files are always zipped (to `error_files/`) and moved (to `error_directory`) regardless of status
+- Committed and pushed twice: first for roadmap/ziplogic/config updates (b7bdbbf), second for Error verdict fix (5e02648)

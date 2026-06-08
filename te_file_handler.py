@@ -24,12 +24,16 @@ class TE(object):
     This class gets a file as input and handles it as follows (function handle_file) :
      1. Query TE cache by the file sha1 for already existing TE results.
      2. If not found in TE cache then :
-       2.1 Upload the file to the appliance for handling by te and te_eb features.
-       2.2 If upload result is upload_success (meaning no TE results yet) then :
-             Query te and te_eb features until receiving TE results.
-               If in between receiving te_eb found results of the early malicious verdict, then display the verdict.
+        2.1 Upload the file to the appliance for handling by te and te_eb features.
+        2.2 If upload result is upload_success (meaning no TE results yet) then :
+              Query te and te_eb features until receiving TE results.
+                If in between receiving te_eb found results of the early malicious verdict, then display the verdict.
      3. Write the TE results (last query/upload response info) into the output folder.
           If resulted TE verdict is malicious then also download the TE report and write it into the output folder.
+     4. If TEX (Scrub) is enabled and configured:
+        - Upload file to TEX API for scrubbing
+        - If cleaned, move cleaned file to tex_clean_files directory
+     5. Move file to appropriate verdict directory (benign/quarantine/error)
     """
 
     def __init__(
@@ -135,12 +139,20 @@ class TE(object):
 
     def parse_verdict(self, response, feature):
         """
-        Parsing the verdict of handled feature results response, in case the that feature response status is FOUND.
-        :param response: the handled response
+        Parse the verdict from a feature results response.
+        Safely handles responses with missing or malformed verdict data.
+
+        :param response: the handled response dictionary
         :param feature: either "te" or "te_eb"
-        :return the verdict
+        :return: the verdict string (e.g. "Malicious", "Benign", "Unknown")
         """
-        verdict = response["response"][0][feature]["combined_verdict"]
+        try:
+            verdict = response["response"][0][feature]["combined_verdict"]
+        except (KeyError, IndexError):
+            self.logger.warning(
+                "{} - No combined_verdict in response, returning Unknown".format(self.log_path)
+            )
+            return "Unknown"
         self.logger.info(
             "{} - {} verdict is: {}".format(self.log_path, feature, verdict)
         )
@@ -148,12 +160,15 @@ class TE(object):
 
     def parse_report_id(self, response):
         """
-        parse and return the summary report id
+        Extract the summary report id from the response and store it in self.report_id.
+
+        Sets self.report_id to an empty string if the id cannot be extracted.
+
         :param response: the (last) response with the handled file TE results
         """
         try:
             self.report_id = response["response"][0]["te"]["summary_report"]
-        except Exception as e:
+        except (KeyError, IndexError) as e:
             self.logger.error("Could not get TE report id, failure: {}".format(e))
 
     def create_response_info(self, response):
@@ -644,6 +659,13 @@ class TE(object):
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
+            elif verdict == "Unknown":
+                basename = self.error_directory.name
+                self.logger.warning(
+                    f"{self.log_path} - Unknown verdict, moving to error directory"
+                )
+                self._add_to_zip(basename)
+                self.move_file(self.error_directory)
 
     def _add_to_zip(self, verdict_basename=None):
         """

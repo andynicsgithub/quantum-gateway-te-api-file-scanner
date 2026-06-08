@@ -10,6 +10,7 @@ import os
 import configparser
 import argparse
 import logging
+import ipaddress
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple, Set
@@ -103,6 +104,11 @@ class ScannerConfig:
         # Validate appliance IP
         if not self.appliance_ip:
             errors.append("appliance_ip is required")
+        else:
+            try:
+                ipaddress.ip_address(self.appliance_ip)
+            except ValueError:
+                errors.append(f"appliance_ip '{self.appliance_ip}' is not a valid IPv4 or IPv6 address")
 
         # Validate input directory exists
         valid, msg = PathHandler.validate_path(self.input_directory, create=False)
@@ -277,6 +283,11 @@ class ScannerConfig:
             parser.read(config_file)
 
             # Read from DEFAULT section
+            # NOTE: Unlike LOGGING/WATCHER/EMAIL/TEX sections, we do NOT use
+            # "key not in parser.defaults()" here because every key in the
+            # DEFAULT section is an intentional default we want to read.
+            # The other sections use that filter to skip keys inherited FROM
+            # the DEFAULT section when iterating over them.
             if "DEFAULT" in parser:
                 section = parser["DEFAULT"]
 
@@ -492,6 +503,8 @@ class ScannerConfig:
                 "watch_batch_delay",
                 "watch_min_batch",
                 "watch_max_batch",
+                "email_smtp_port",
+                "email_imap_port",
             }
             for cli_attr, config_key in _cli_mappings:
                 val = getattr(cli_args, cli_attr, None)

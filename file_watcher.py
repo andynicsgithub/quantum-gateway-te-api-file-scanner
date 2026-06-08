@@ -142,8 +142,11 @@ class CopyCompletionWatcher(FileSystemEventHandler):
 
     def on_closed(self, event):
         """
-        Triggered when file handle is closed (copy complete).
-        Marks file as ready for processing.
+        NOTE: This handler is currently unused. The watchdog library does not
+        emit 'close' events on any platform, so this method will never be called.
+        File copy completion is detected via stale-file detection in
+        _check_batch_ready() (checks last_modified timestamp) instead.
+        This handler may be removed in a future refactoring.
         """
         if event.is_directory:
             return
@@ -350,11 +353,6 @@ def start_watching(config, url, url_tex=""):
                 batch_logger.warning(f"File no longer exists: {file_path}")
                 continue
 
-            # Initialize for except handler (prevent NameError if Path() fails before file_obj assignment)
-            sub_dir = ""
-            file_name = file_path
-            file_obj = None
-
             try:
                 file_obj = Path(file_path)
                 file_name = file_obj.name
@@ -387,12 +385,13 @@ def start_watching(config, url, url_tex=""):
                     batch_summary["error"] += 1
 
             except Exception as e:
+                # Use file_path (the loop variable) for accurate error reporting
                 batch_logger.error(f"Error processing {file_path}: {e}")
                 batch_summary["error"] += 1
                 batch_summary["all_files"].append(
                     {
-                        "name": file_name,
-                        "path": sub_dir if sub_dir else "",
+                        "name": file_path,
+                        "path": "",
                         "verdict": "Error",
                         "tex_status": None,
                     }
@@ -400,14 +399,16 @@ def start_watching(config, url, url_tex=""):
                 # Try to move to error directory manually
                 try:
                     if file_obj is not None:
-                        error_path = config.error_directory / sub_dir / file_obj.name
+                        error_sub = str(file_obj.parent.relative_to(config.input_directory))
+                        if error_sub == ".":
+                            error_sub = ""
+                        error_path = config.error_directory / error_sub / file_obj.name
                         PathHandler.safe_move(file_path, error_path)
-                    display = f"{sub_dir}/{file_name}" if sub_dir else file_name
-                    batch_logger.info(f"Moved {display} to error directory")
+                        display = f"{error_sub}/{file_obj.name}" if error_sub else file_obj.name
+                        batch_logger.info(f"Moved {display} to error directory")
                 except Exception as move_error:
-                    display = f"{sub_dir}/{file_name}" if sub_dir else file_name
                     batch_logger.error(
-                        f"Failed to move {display} to error directory: {move_error}"
+                        f"Failed to move {file_path} to error directory: {move_error}"
                     )
                 # Continue to next file
                 continue

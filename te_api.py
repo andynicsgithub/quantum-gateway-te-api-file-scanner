@@ -18,15 +18,12 @@ import logging
 from pathlib import Path
 from functools import partial
 from datetime import datetime
-import warnings
+import urllib3
 
-# Silence only the specific urllib3 TLS verification warning
-# (keeps deprecation warnings and other urllib3 messages visible)
-warnings.filterwarnings(
-    "ignore",
-    message="Unverified HTTPS request is being made",
-    module="urllib3.connectionpool",
-)
+# Silence the urllib3 InsecureRequestWarning globally.
+# This is the standard way to suppress the "Unverified HTTPS request"
+# warning when verify=False is intentionally used with self-signed certs.
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # =======================
 # Utility Functions
@@ -261,6 +258,7 @@ def main():
     logger.info("Configuration validated successfully")
 
     # Build API URLs
+    # Port 18194 is the only port the TE API server listens on
     url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/"
 
     url_tex = config.tex_url
@@ -364,14 +362,7 @@ def main():
             zip_mgr.close()
 
         logger.info("Processing complete!")
-        # Write separator directly to handlers (without timestamps)
-        for handler in logger.handlers:
-            if hasattr(handler, "stream") and handler.stream:
-                stream = handler.stream
-                stream.write("\n")
-                stream.write("++++++++++\n")
-                stream.write("\n")
-                stream.flush()
+        logger.info("++++++++++")
 
         # End-of-run: rotate if over size limit, cleanup old files
         # Close existing file handlers so rename succeeds on Windows (WinError 32)
@@ -492,6 +483,8 @@ def process_discovered_files(
         logger.info(
             f"Processing {len(other_files)} non-archive files with concurrency={config.concurrency}"
         )
+        # The config object is pickled to worker processes. pathlib.Path pickling
+        # is supported in Python 3.9+, which is the minimum required version.
         process_func = partial(
             process_files,
             config=config,

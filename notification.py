@@ -10,6 +10,7 @@ and optional IMAP "Sent" folder saving.
 import smtplib
 import ssl
 import logging
+import socket
 import imaplib
 from email.header import Header
 from pathlib import Path
@@ -336,7 +337,25 @@ def _save_to_imap(config, body, subject):
 
     try:
         if imap_use_ssl:
-            imap_conn = imaplib.IMAP4_SSL(imap_server, imap_port, timeout=30)
+            if getattr(config, "email_imap_skip_tls_verify", False):
+                ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                ssl_ctx.check_hostname = False
+                ssl_ctx.verify_mode = ssl.CERT_NONE
+            else:
+                ssl_ctx = ssl.create_default_context()
+
+            # Build the SSL-wrapped socket ourselves so we can control
+            # verification on all Python 3.9+ versions (ssl_context
+            # kwarg on IMAP4_SSL was added in 3.11).
+            sock = ssl_ctx.wrap_socket(
+                socket.create_connection(
+                    (imap_server, imap_port), timeout=30
+                ),
+                server_hostname=imap_server,
+            )
+            imap_conn = imaplib.IMAP4(imap_server, imap_port, timeout=30)
+            imap_conn.sock = sock
+            imap_conn.file = socket.makefile("rb")
         else:
             imap_conn = imaplib.IMAP4(imap_server, imap_port, timeout=30)
 

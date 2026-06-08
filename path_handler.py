@@ -243,6 +243,7 @@ class PathHandler:
                         try:
                             dst.unlink()
                         except Exception:
+                            logger.debug(f"Failed to delete corrupted destination: {dst}")
                             pass
                         return (
                             False,
@@ -324,7 +325,8 @@ class PathHandler:
             value, _ = winreg.QueryValueEx(key, "LongPathsEnabled")
             winreg.CloseKey(key)
             return value == 1
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Windows long path registry not accessible: {e}")
             return False
 
     @staticmethod
