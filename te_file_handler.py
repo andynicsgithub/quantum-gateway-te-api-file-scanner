@@ -606,10 +606,19 @@ class TE(object):
         if self.url_tex and self.tex_api_key and self.config.tex_enabled:
             self._process_tex_results(self.config)
 
-        if self.final_status_label == "FOUND":
-            self.logger.debug("{} - move_file called".format(self.log_path))
-            verdict = self.parse_verdict(self.final_response, "te")
+        # Get verdict for all files (needed for Error handling outside FOUND check)
+        verdict = self.parse_verdict(self.final_response, "te")
 
+        # Handle Error verdict regardless of status - always zip and move to error
+        if verdict == "Error":
+            basename = self.error_directory.name
+            self.logger.debug(
+                f"{self.log_path} - [ZIP] Error verdict (status={self.final_status_label}): basename={basename!r}"
+            )
+            self._add_to_zip(basename)
+            self.move_file(self.error_directory)
+        elif self.final_status_label == "FOUND":
+            self.logger.debug("{} - move_file called".format(self.log_path))
             self.logger.debug(
                 f"{self.log_path} - [ZIP] verdict={verdict}"
             )
@@ -635,13 +644,6 @@ class TE(object):
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
-            elif verdict == "Error":
-                basename = self.error_directory.name
-                self.logger.debug(
-                    f"{self.log_path} - [ZIP] Error: basename={basename!r}"
-                )
-                self._add_to_zip(basename)
-                self.move_file(self.error_directory)
 
     def _add_to_zip(self, verdict_basename=None):
         """
