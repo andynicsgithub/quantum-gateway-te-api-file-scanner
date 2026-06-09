@@ -144,9 +144,6 @@ def main():
         help="Seconds to wait after last file activity before processing batch (default: from config)",
     )
     parser.add_argument(
-        "--watch-min", type=int, help="Minimum files to trigger batch (0 = from config)"
-    )
-    parser.add_argument(
         "--watch-max", type=int, help="Maximum batch size (0 = unlimited, from config)"
     )
 

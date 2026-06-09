@@ -38,7 +38,6 @@ class ScannerConfig:
 
     # Watcher-specific configuration
     watch_batch_delay: int = 5
-    watch_min_batch: int = 0
     watch_max_batch: int = 0
 
     # Archive file types
@@ -142,9 +141,6 @@ class ScannerConfig:
         elif self.watch_batch_delay > 60:
             errors.append("watch_batch_delay must be at most 60")
 
-        if self.watch_min_batch < 0:
-            errors.append("watch_min_batch cannot be negative")
-
         if self.watch_max_batch < 0:
             errors.append("watch_max_batch cannot be negative")
 
@@ -201,7 +197,6 @@ class ScannerConfig:
             "max_retries": 120,
             "watch_mode": False,
             "watch_batch_delay": 5,
-            "watch_min_batch": 0,
             "watch_max_batch": 0,
             "log_level": "INFO",
             "log_dir": "logs",
@@ -252,7 +247,6 @@ class ScannerConfig:
                     "max_log_size_mb",
                     "log_retention_days",
                     "watch_batch_delay",
-                    "watch_min_batch",
                     "watch_max_batch",
                     "email_smtp_port",
                     "email_imap_port",
@@ -302,7 +296,6 @@ class ScannerConfig:
                             "max_log_size_mb",
                             "log_retention_days",
                             "watch_batch_delay",
-                            "watch_min_batch",
                             "watch_max_batch",
                         ]:
                             try:
@@ -352,7 +345,6 @@ class ScannerConfig:
                         # Convert types appropriately
                         if key in [
                             "watch_batch_delay",
-                            "watch_min_batch",
                             "watch_max_batch",
                         ]:
                             try:
@@ -471,7 +463,6 @@ class ScannerConfig:
                 ("max_retries", "max_retries"),
                 ("watch", "watch_mode"),
                 ("watch_delay", "watch_batch_delay"),
-                ("watch_min", "watch_min_batch"),
                 ("watch_max", "watch_max_batch"),
                 ("email_enabled", "email_enabled"),
                 ("email_smtp_server", "email_smtp_server"),
@@ -501,7 +492,6 @@ class ScannerConfig:
                 "seconds_to_wait",
                 "max_retries",
                 "watch_batch_delay",
-                "watch_min_batch",
                 "watch_max_batch",
                 "email_smtp_port",
                 "email_imap_port",
@@ -609,9 +599,6 @@ class ScannerConfig:
         )
         if self.watch_mode:
             print(f"  Batch delay:           {self.watch_batch_delay}s")
-            print(
-                f"  Min batch size:        {self.watch_min_batch if self.watch_min_batch > 0 else 'N/A'}"
-            )
             print(
                 f"  Max batch size:        {self.watch_max_batch if self.watch_max_batch > 0 else 'Unlimited'}"
             )

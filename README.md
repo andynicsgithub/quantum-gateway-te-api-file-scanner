@@ -63,9 +63,6 @@ Add the `[WATCHER]` section to your `config.ini`:
 # Seconds to wait after last file activity before processing batch
 watch_batch_delay = 5
 
-# Minimum files to trigger batch (0 = process immediately after delay)
-watch_min_batch = 0
-
 # Maximum batch size (0 = unlimited)
 watch_max_batch = 0
 ```
@@ -76,7 +73,6 @@ watch_max_batch = 0
 |--------|-------------|---------|
 | `--watch` | Enable continuous watch mode | Disabled |
 | `--watch-delay SECS` | Seconds to wait after last file activity | 5 |
-| `--watch-min NUM` | Minimum files to trigger batch | 0 (immediate) |
 | `--watch-max NUM` | Maximum batch size | 0 (unlimited) |
 
 ### Watch Mode Examples
@@ -86,9 +82,9 @@ watch_max_batch = 0
 python te_api.py --watch --ip 192.168.1.100
 ```
 
-**Custom batch delay and minimum files:**
+**Custom batch delay:**
 ```bash
-python te_api.py --watch --watch-delay 10 --watch-min 5 --ip 192.168.1.100
+python te_api.py --watch --watch-delay 10 --ip 192.168.1.100
 ```
 
 **Process files immediately (no delay):**
@@ -419,15 +415,30 @@ For continuous monitoring, add the `[WATCHER]` section to your `config.ini`:
 
 ```ini
 [WATCHER]
-# Seconds to wait after last file activity before processing batch
+# Seconds to wait after the last file activity before processing a batch
 watch_batch_delay = 5
-
-# Minimum files to trigger batch (0 = process immediately after delay)
-watch_min_batch = 0
 
 # Maximum batch size (0 = unlimited)
 watch_max_batch = 0
 ```
+
+See **How Watch Mode Works** above for an explanation of the quiet-period trigger logic.
+
+**How Watch Mode Works:**
+
+The scanner uses a "quiet-period" trigger to determine when to process files:
+
+1. When files are copied into the input directory, a timer starts.
+2. Every time a new file arrives or an existing file is modified, the timer resets.
+3. When the directory has been quiet (no new files, no file modifications) for `watch_batch_delay` seconds, the batch is processed.
+4. All pending files are dispatched together in one batch (up to `watch_max_batch` if configured).
+
+This ensures that files copied in rapid succession are processed together, rather than being split across multiple batches.
+
+**Configuration tips:**
+
+- `watch_batch_delay = 5` — wait 5 seconds after the last file event before processing. Increase this (e.g., `10`) if files take a while to copy or if you see files being split across batches.
+- `watch_max_batch = 0` — process all pending files in a single batch. Set to a positive number (e.g., `50`) to limit batch size for very large bursts.
 
 ### Method 2: Environment Variables
 
@@ -477,7 +488,6 @@ usage: te_api.py [-h] [-in INPUT_DIRECTORY] [-rep REPORTS_DIRECTORY]
                           the directory to move files which cause a scanning error
     --watch                Enable continuous watch mode
     --watch-delay SECS     Seconds to wait after last file activity (default: 5)
-    --watch-min NUM        Minimum files to trigger batch (default: 0)
     --watch-max NUM        Maximum batch size (default: 0, unlimited)
     --email-enabled        Enable email notifications
     --email-smtp-server    SMTP server hostname or IP
@@ -594,9 +604,9 @@ python te_api.py --watch
 python te_api.py --watch --ip 192.168.1.100 --watch-delay 10
 ```
 
-**Continuous monitoring with minimum batch size:**
+**Continuous monitoring with custom delay:**
 ```bash
-python te_api.py --watch --watch-min 5 --watch-delay 15 --ip 192.168.1.100
+python te_api.py --watch --watch-delay 15 --ip 192.168.1.100
 ```
 
 Press `Ctrl+C` to stop the watcher in development mode.

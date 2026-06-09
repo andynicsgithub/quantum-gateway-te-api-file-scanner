@@ -42,11 +42,8 @@ qcow2 = true
 
 [WATCHER]
 # Watch mode settings (used when running with --watch flag)
-  # Wait time in seconds after last file activity before processing batch. Must be between 1 and 60.
-   watch_batch_delay = 5
-
-# Minimum files to trigger batch (0 = process immediately after delay)
-watch_min_batch = 0
+# Wait time in seconds after last file activity before processing batch. Must be between 1 and 60.
+watch_batch_delay = 5
 
 # Maximum batch size (0 = unlimited)
 watch_max_batch = 0
