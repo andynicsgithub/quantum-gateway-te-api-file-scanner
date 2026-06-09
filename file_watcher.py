@@ -20,7 +20,7 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
 from path_handler import PathHandler
-from te_api import process_single_file
+from te_api import process_single_file, find_and_delete_empty_subdirectories
 
 
 class CopyCompletionWatcher(FileSystemEventHandler):
@@ -413,6 +413,9 @@ def start_watching(config, url, url_tex="", stop_event=None):
             batch_logger.warning(f"Email notification failed: {e}")
 
         batch_logger.info("Batch processing complete, waiting for new files...")
+
+        # Clean up empty directories left behind after moving files
+        find_and_delete_empty_subdirectories(config.input_directory)
 
     # Create and start watcher
     try:
