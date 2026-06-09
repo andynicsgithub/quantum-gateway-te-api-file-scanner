@@ -97,7 +97,7 @@ def _build_subject(config, summary):
             t = Template(subject_template)
             safe_data = {
                 "timestamp": datetime.now().astimezone().strftime(
-                    "%Y-%m-%d %H:%M:%S %z"
+                    "%Y-%m-%d %H:%M:%S"
                 ),
                 "appliance_ip": config.appliance_ip or "N/A",
                 "processed": summary.get("processed", 0),
@@ -164,7 +164,7 @@ def _render_template(template_file, config, summary):
         )
         return _build_legacy_body(config, summary)
 
-    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
     # Build file list from all_files (if available)
     all_files = summary.get("all_files", [])
@@ -220,7 +220,7 @@ def _render_template(template_file, config, summary):
 
 def _build_legacy_body(config, summary):
     """Legacy email body builder (fallback when no template file is configured)."""
-    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %z")
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S")
 
     lines = [
         "TE API Scanner - Batch Report",
