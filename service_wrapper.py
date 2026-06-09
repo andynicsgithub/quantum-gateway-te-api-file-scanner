@@ -80,7 +80,7 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
         """
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE,
-            servicemanager.PY_SERVICE_STARTED,
+            servicemanager.PYS_SERVICE_STARTED,
             ("%s" % self._svc_name_),
         )
 
@@ -98,7 +98,7 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
         except Exception as e:
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_ERROR_TYPE,
-                servicemanager.PY_SERVICE_FAILED,
+                servicemanager.PYS_SERVICE_FAILED,
                 ("%s: %s" % (self._svc_name_, str(e))),
             )
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
