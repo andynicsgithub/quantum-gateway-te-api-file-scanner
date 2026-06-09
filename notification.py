@@ -15,7 +15,7 @@ from email.header import Header
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timezone
+from datetime import datetime
 from email.utils import format_datetime
 from string import Template
 
@@ -96,8 +96,8 @@ def _build_subject(config, summary):
         try:
             t = Template(subject_template)
             safe_data = {
-                "timestamp": datetime.now(timezone.utc).strftime(
-                    "%Y-%m-%d %H:%M:%S UTC"
+                "timestamp": datetime.now().astimezone().strftime(
+                    "%Y-%m-%d %H:%M:%S %Z"
                 ),
                 "appliance_ip": config.appliance_ip or "N/A",
                 "processed": summary.get("processed", 0),
@@ -164,7 +164,7 @@ def _render_template(template_file, config, summary):
         )
         return _build_legacy_body(config, summary)
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
     # Build file list from all_files (if available)
     all_files = summary.get("all_files", [])
@@ -220,7 +220,7 @@ def _render_template(template_file, config, summary):
 
 def _build_legacy_body(config, summary):
     """Legacy email body builder (fallback when no template file is configured)."""
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    timestamp = datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S %Z")
 
     lines = [
         "TE API Scanner - Batch Report",
