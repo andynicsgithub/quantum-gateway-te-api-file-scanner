@@ -78,49 +78,24 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
         """
         Main service run loop.
         """
-        debug_log = os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_debug.log")
+        servicemanager.LogMsg(
+            servicemanager.EVENTLOG_INFORMATION_TYPE,
+            servicemanager.PYS_SERVICE_STARTED,
+            ("%s" % self._svc_name_),
+        )
+
         try:
-            with open(debug_log, "w") as f:
-                f.write("SvcDoRun starting\n")
-                f.write(f"__file__ = {__file__}\n")
-                f.write(f"cwd = {os.getcwd()}\n")
-
-            servicemanager.LogMsg(
-                servicemanager.EVENTLOG_INFORMATION_TYPE,
-                servicemanager.PYS_SERVICE_STARTED,
-                ("%s" % self._svc_name_),
-            )
-            with open(debug_log, "a") as f:
-                f.write("LogMsg OK\n")
-
             # Change to script directory so config.ini is found
             script_dir = os.path.dirname(os.path.abspath(__file__))
             os.chdir(script_dir)
-            with open(debug_log, "a") as f:
-                f.write(f"Changed dir to {script_dir}\n")
 
             # Import te_api and run main with watch mode
-            with open(debug_log, "a") as f:
-                f.write("Importing te_api...\n")
             import te_api
-            with open(debug_log, "a") as f:
-                f.write("te_api imported\n")
 
             # Run main in watch mode, ignoring any sys.argv from pywin32
-            with open(debug_log, "a") as f:
-                f.write("Calling te_api.main...\n")
             te_api.main(stop_event=self.stop_event, cli_args=["--watch"])
 
-        except SystemExit as e:
-            with open(debug_log, "a") as f:
-                f.write(f"SystemExit: {e}\n")
-            self.ReportServiceStatus(win32service.SERVICE_STOPPED)
-
         except Exception as e:
-            import traceback
-            with open(debug_log, "a") as f:
-                f.write(f"Exception: {e}\n")
-                f.write(traceback.format_exc())
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_ERROR_TYPE,
                 servicemanager.PYS_SERVICE_FAILED,
@@ -129,7 +104,7 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
-def main():
+ def main():
     """
     Entry point for service management.
 
@@ -139,13 +114,7 @@ def main():
         start - Start the service
         stop - Stop the service
     """
-    try:
-        win32serviceutil.HandleCommandLine(TEWatcherService)
-    except Exception as e:
-        import traceback
-        with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "service_crash.log"), "w") as f:
-            f.write(f"Service crash: {e}\n")
-            f.write(traceback.format_exc())
+    win32serviceutil.HandleCommandLine(TEWatcherService)
 
 
 if __name__ == "__main__":
