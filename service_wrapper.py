@@ -48,9 +48,9 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
     Account: Network Service (default) or configured user
     """
 
-    _service_name = "TEWatcher"
-    _display_name = "Threat Emulation Watcher"
-    _description = "Monitors input directory for files to scan via Threat Emulation API. Runs in continuous watch mode with automatic batch processing."
+    _svc_name_ = "TEWatcher"
+    _svc_display_name_ = "Threat Emulation Watcher"
+    _svc_description_ = "Monitors input directory for files to scan via Threat Emulation API. Runs in continuous watch mode with automatic batch processing."
 
     # Service account (None = uses Network Service by default)
     _username = None
@@ -81,7 +81,7 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
         servicemanager.LogMsg(
             servicemanager.EVENTLOG_INFORMATION_TYPE,
             servicemanager.PY_SERVICE_STARTED,
-            ("%s" % self._service_name),
+            ("%s" % self._svc_name_),
         )
 
         try:
@@ -99,7 +99,7 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             servicemanager.LogMsg(
                 servicemanager.EVENTLOG_ERROR_TYPE,
                 servicemanager.PY_SERVICE_FAILED,
-                ("%s: %s" % (self._service_name, str(e))),
+                ("%s: %s" % (self._svc_name_, str(e))),
             )
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
