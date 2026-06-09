@@ -60,23 +60,32 @@ def send_batch_notification(config, summary):
         logger.debug(
             f"Connecting to SMTP server {config.email_smtp_server}:{config.email_smtp_port}"
         )
-        with smtplib.SMTP(config.email_smtp_server, config.email_smtp_port, timeout=30) as server:
+        if config.email_tls_method == "smtp_ssl":
+            # Implicit SSL from connection start (port 465)
+            server = smtplib.SMTP_SSL(config.email_smtp_server, config.email_smtp_port, timeout=30)
             server.ehlo()
-
-            if config.email_use_tls:
-                if getattr(config, "email_skip_tls_verify", False):
-                    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-                    ssl_ctx.check_hostname = False
-                    ssl_ctx.verify_mode = ssl.CERT_NONE
-                else:
-                    ssl_ctx = ssl.create_default_context()
-                server.starttls(context=ssl_ctx)
-                server.ehlo()
-
             if config.email_username and config.email_password:
                 server.login(config.email_username, config.email_password)
-
             server.sendmail(config.email_from, config.email_to, msg.as_string())
+        else:
+            # STARTTLS or none (port 587 or similar)
+            with smtplib.SMTP(config.email_smtp_server, config.email_smtp_port, timeout=30) as server:
+                server.ehlo()
+
+                if config.email_tls_method == "starttls":
+                    if getattr(config, "email_skip_tls_verify", False):
+                        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                        ssl_ctx.check_hostname = False
+                        ssl_ctx.verify_mode = ssl.CERT_NONE
+                    else:
+                        ssl_ctx = ssl.create_default_context()
+                    server.starttls(context=ssl_ctx)
+                    server.ehlo()
+
+                if config.email_username and config.email_password:
+                    server.login(config.email_username, config.email_password)
+
+                server.sendmail(config.email_from, config.email_to, msg.as_string())
 
         logger.info(f"Email notification sent to {config.email_to}: {subject}")
 
@@ -179,38 +188,31 @@ def _render_template(template_file, config, summary):
             lines.append(f"  - {mf['name']} (verdict: {mf['verdict']})")
         malicious_files = "\n".join(lines)
 
+    error_count = summary.get("error", 0)
+    if error_count > 0:
+        error_note = (
+            f"Note: {error_count} file(s) encountered errors during processing.\n"
+            "Check logs for details.\n"
+        )
+    else:
+        error_note = ""
+
     template_data = {
         "timestamp": timestamp,
         "appliance_ip": config.appliance_ip or "N/A",
         "processed": summary.get("processed", 0),
         "benign": summary.get("benign", 0),
         "malicious": summary.get("malicious", 0),
-        "error": summary.get("error", 0),
+        "error": error_count,
         "file_list": file_list,
         "malicious_files": malicious_files,
+        "error_note": error_note,
         "smtp_server": config.email_smtp_server or "N/A",
     }
 
     try:
         t = Template(template_str)
-        rendered = t.safe_substitute(template_data)
-        # Conditionally strip error note to avoid "Note: 0 file(s)..." on clean runs
-        error_count = template_data["error"]
-        if error_count == 0:
-            lines = rendered.split("\n")
-            filtered = []
-            skip = False
-            for line in lines:
-                if line.startswith("Note:") and "file(s) encountered errors" in line:
-                    skip = True
-                    continue
-                if skip:
-                    if line.strip() == "" or line.startswith("Check logs"):
-                        continue
-                    skip = False
-                filtered.append(line)
-            rendered = "\n".join(filtered)
-        return rendered
+        return t.safe_substitute(template_data)
     except Exception as e:
         logger.warning(
             f"Failed to render template file '{template_file}': {e}. Using legacy body."

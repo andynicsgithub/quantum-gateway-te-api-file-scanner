@@ -159,7 +159,8 @@ email_enabled = true
 # SMTP settings
 email_smtp_server = smtp.example.com
 email_smtp_port = 587
-email_use_tls = true
+email_tls_method = starttls
+# none | starttls | smtp_ssl
 email_username = user@example.com
 email_password = your_password
 email_from = scanner@example.com
@@ -190,7 +191,7 @@ email_imap_folder = Sent
 | `email_enabled` | Enable email notifications | false |
 | `email_smtp_server` | SMTP server hostname or IP | - |
 | `email_smtp_port` | SMTP server port | 587 |
-| `email_use_tls` | Use TLS for SMTP connection | true |
+| `email_tls_method` | SMTP TLS method: `none`, `starttls`, or `smtp_ssl` | `starttls` |
 | `email_username` | SMTP authentication username | - |
 | `email_password` | SMTP authentication password | - |
 | `email_from` | Sender email address | - |
@@ -248,7 +249,7 @@ Server: ${smtp_server}
 | `--email-enabled` | Enable email notifications |
 | `--email-smtp-server HOST` | SMTP server hostname or IP |
 | `--email-smtp-port PORT` | SMTP server port |
-| `--email-use-tls` | Use TLS for SMTP connection |
+| `--email-tls-method METHOD` | SMTP TLS method: `none`, `starttls`, or `smtp_ssl` |
 | `--email-username USER` | SMTP authentication username |
 | `--email-password PASS` | SMTP authentication password |
 | `--email-from ADDR` | Sender email address |
@@ -502,7 +503,7 @@ usage: te_api.py [-h] [-in INPUT_DIRECTORY] [-rep REPORTS_DIRECTORY]
     --email-enabled        Enable email notifications
     --email-smtp-server    SMTP server hostname or IP
     --email-smtp-port      SMTP server port (default: 587)
-    --email-use-tls        Use TLS for SMTP connection
+    --email-tls-method     SMTP TLS method: none, starttls, or smtp_ssl (default: starttls)
     --email-username       SMTP authentication username
    --email-password       SMTP authentication password
     --email-from           Sender email address
@@ -675,6 +676,26 @@ sudo mount -t cifs //server/share /mnt/smbshare -o username=user,password=pass
 - Verify paths exist and are accessible
 - Review error messages for specific issues
 
+## Security Considerations
+
+### TLS / Certificate Verification
+
+The scanner provides `*_skip_tls_verify` flags for environments using self-signed or internally signed certificates. These are **opt-in** and default to `false` (verification **enabled**).
+
+| Flag | Applies To | Purpose |
+|------|-----------|---------|
+| `appliance_skip_tls_verify` | TE appliance, TEX API | Self-signed certificate on Check Point appliance |
+| `email_skip_tls_verify` | SMTP (outbound email) | Self-signed certificate on email server |
+| `email_imap_skip_tls_verify` | IMAP (sent-mail storage) | Self-signed certificate on IMAP server |
+
+**Warning:** Disabling TLS verification makes the connection vulnerable to man-in-the-middle attacks. Only enable these flags when connecting to trusted internal endpoints with self-signed certificates. Do not use with externally-facing servers.
+
+### Password Storage
+
+Passwords (SMTP, IMAP, zip archive) are stored in plaintext in `config.ini`. This is a security-sensitive file:
+
+- **Restrict file permissions:** On Linux/Unix, run `chmod 600 config.ini` so only your user can read or modify it.
+- **Do not commit `config.ini`** — it is gitignored. Only `config.ini.default` (with blank passwords) is tracked in the repository.
 
 ### References
 * Additional Threat Emulation API info: [sk167161](https://supportcenter.checkpoint.com/supportcenter/portal?eventSubmit_doGoviewsolutiondetails=&solutionid=sk167161)

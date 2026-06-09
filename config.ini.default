@@ -54,9 +54,13 @@ watch_max_batch = 0
 email_enabled = false
 
 # SMTP settings
-email_smtp_server = 
+email_smtp_server =
 email_smtp_port = 587
-email_use_tls = true
+email_tls_method = starttls
+# none | starttls | smtp_ssl
+# none: no encryption (local/internal mail servers only)
+# starttls: upgrade connection with STARTTLS after connect (port 587)
+# smtp_ssl: implicit SSL from connection start (port 465)
 email_skip_tls_verify = false
 email_username = 
 email_password = 
@@ -102,7 +106,7 @@ tex_clean_files_directory = tex_clean_files
 [TEX_SUPPORTED_FILE_TYPES]
 # File types (extensions) to send to TEX API for scrubbing
 # Files with extensions not listed here will be skipped from TEX processing
-# Empty section or missing entry = skip that file type
+# Empty section or missing entry = skip all file types from TEX processing
 bmp = true
 dcm = true
 dib = true
@@ -155,8 +159,9 @@ xml = true
 
 [TEX_SCRUBBED_PARTS]
 # Scrubbed parts codes to include in TEX scrub request
-# Each entry enables that content part for scrubbing
-# Disabled entries (false) are excluded from the scrub request
+# Missing section or entirely commented out = use hardcoded defaults
+# All entries set to false (or empty section) = skip scrubbing entirely for this file
+# Mixed true/false = only enabled codes are sent to the API
 1017 = false   # Custom Properties
 1018 = true   # Database Queries
 1019 = true   # Embedded Objects

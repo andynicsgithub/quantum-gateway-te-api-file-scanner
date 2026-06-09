@@ -19,7 +19,6 @@ from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
-from path_handler import PathHandler
 from te_api import process_single_file, find_and_delete_empty_subdirectories
 
 
@@ -305,7 +304,6 @@ def start_watching(config, url, url_tex="", stop_event=None):
     # Define batch processing callback
     def process_batch_callback(file_paths):
         """Process a batch of files."""
-        from path_handler import PathHandler
         from notification import send_batch_notification
         from zip_archive import ZipArchiveManager
 
@@ -387,14 +385,13 @@ def start_watching(config, url, url_tex="", stop_event=None):
                 )
                 # Try to move to error directory manually
                 try:
-                    if file_obj is not None:
-                        error_sub = str(file_obj.parent.relative_to(config.input_directory))
-                        if error_sub == ".":
-                            error_sub = ""
-                        error_path = config.error_directory / error_sub / file_obj.name
-                        PathHandler.safe_move(file_path, error_path)
-                        display = f"{error_sub}/{file_obj.name}" if error_sub else file_obj.name
-                        batch_logger.info(f"Moved {display} to error directory")
+                    error_sub = str(Path(file_path).parent.relative_to(config.input_directory))
+                    if error_sub == ".":
+                        error_sub = ""
+                    error_path = config.error_directory / error_sub / Path(file_path).name
+                    PathHandler.safe_move(file_path, error_path)
+                    display = f"{error_sub}/{Path(file_path).name}" if error_sub else Path(file_path).name
+                    batch_logger.info(f"Moved {display} to error directory")
                 except Exception as move_error:
                     batch_logger.error(
                         f"Failed to move {file_path} to error directory: {move_error}"

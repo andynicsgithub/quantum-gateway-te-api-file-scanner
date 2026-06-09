@@ -7,6 +7,7 @@ te_api v11.2 (alpha)
 from te_file_handler import TE
 from config_manager import ScannerConfig
 from path_handler import PathHandler
+import sys
 from logger_config import setup_logging, rotate_today_log, cleanup_old_logs
 from zip_archive import ZipArchiveManager
 from safe_filename import sanitize_filename
@@ -158,7 +159,10 @@ def main(stop_event=None, cli_args=None):
         "--email-smtp-port", type=int, help="SMTP server port (default: 587)"
     )
     parser.add_argument(
-        "--email-use-tls", action="store_true", help="Use TLS for SMTP connection"
+        "--email-tls-method",
+        choices=["none", "starttls", "smtp_ssl"],
+        default=None,
+        help="SMTP TLS method: none (no encryption), starttls (port 587), or smtp_ssl (port 465)",
     )
     parser.add_argument(
         "--email-skip-tls-verify",
@@ -661,4 +665,4 @@ def process_files(
 
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

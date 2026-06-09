@@ -104,7 +104,7 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
- def main():
+def main():
     """
     Entry point for service management.
 

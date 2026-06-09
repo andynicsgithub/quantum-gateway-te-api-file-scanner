@@ -89,6 +89,8 @@ class TE(object):
         )
         self.tex_api_key = tex_api_key
         self.config = config
+        if config is None:
+            raise ValueError("ScannerFileHandler requires a config object")
         self.seconds_to_wait = config.seconds_to_wait if config else 10
         self.max_retries = config.max_retries if config else 120
         self.skip_tls_verify = config.appliance_skip_tls_verify if config else False
@@ -403,8 +405,8 @@ class TE(object):
             self.file_name.rsplit(".", 1)[-1].lower() if "." in self.file_name else ""
         )
         if (
-            config.tex_supported_file_types
-            and file_ext not in config.tex_supported_file_types
+            not config.tex_supported_file_types
+            or file_ext not in config.tex_supported_file_types
         ):
             self.logger.info(
                 f"Skipping TEX — file type not enabled: {self.log_path} ({file_ext})"
@@ -418,6 +420,9 @@ class TE(object):
             )
 
             # Use configured scrubbed parts codes
+            if config.tex_scrubbed_parts_codes is None:
+                self.logger.info(f"Skipping TEX scrub - all parts disabled in config: {self.log_path}")
+                return None
             scrubbed_parts = (
                 sorted(config.tex_scrubbed_parts_codes)
                 if config.tex_scrubbed_parts_codes
@@ -526,8 +531,8 @@ class TE(object):
             self.file_name.rsplit(".", 1)[-1].lower() if "." in self.file_name else ""
         )
         if (
-            self.config.tex_supported_file_types
-            and file_ext not in self.config.tex_supported_file_types
+            not self.config.tex_supported_file_types
+            or file_ext not in self.config.tex_supported_file_types
         ):
             self._tex_status = "unsupported"
             self.logger.info(

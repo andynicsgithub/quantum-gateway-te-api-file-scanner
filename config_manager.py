@@ -47,7 +47,7 @@ class ScannerConfig:
     email_enabled: bool = False
     email_smtp_server: str = ""
     email_smtp_port: int = 587
-    email_use_tls: bool = True
+    email_tls_method: str = "starttls"
     email_skip_tls_verify: bool = False
     email_username: str = ""
     email_password: str = ""
@@ -171,8 +171,8 @@ class ScannerConfig:
         """
         Load configuration from multiple sources with precedence:
         1. Hardcoded defaults (lowest priority)
-        2. Environment variables
-        3. Config file
+        2. Config file
+        3. Environment variables
         4. Command-line arguments (highest priority)
 
         Args:
@@ -205,7 +205,7 @@ class ScannerConfig:
             "email_enabled": False,
             "email_smtp_server": "",
             "email_smtp_port": 587,
-            "email_use_tls": True,
+            "email_tls_method": "starttls",
             "email_skip_tls_verify": False,
             "email_username": "",
             "email_password": "",
@@ -234,44 +234,7 @@ class ScannerConfig:
             "save_response_info": True,
         }
 
-        # 2. Override with environment variables
-        for key in config_data.keys():
-            env_key = env_prefix + key.upper()
-            if env_key in os.environ:
-                value = os.environ[env_key]
-                # Convert types appropriately
-                if key in [
-                    "concurrency",
-                    "seconds_to_wait",
-                    "max_retries",
-                    "max_log_size_mb",
-                    "log_retention_days",
-                    "watch_batch_delay",
-                    "watch_max_batch",
-                    "email_smtp_port",
-                    "email_imap_port",
-                ]:
-                    try:
-                        config_data[key] = int(value)
-                    except ValueError:
-                        print(f"Warning: Invalid integer value for {env_key}: {value}")
-                elif key in [
-                    "watch_mode",
-                    "email_enabled",
-                    "email_use_tls",
-                    "email_skip_tls_verify",
-                    "email_imap_enabled",
-                    "email_imap_use_ssl",
-                    "email_imap_skip_tls_verify",
-                    "appliance_skip_tls_verify",
-                    "tex_enabled",
-                    "save_response_info",
-                ]:
-                    config_data[key] = value.lower() in ["true", "1", "yes", "on"]
-                else:
-                    config_data[key] = value
-
-        # 3. Override with config file
+        # 2. Override with config file
         if os.path.exists(config_file):
             parser = configparser.ConfigParser()
             parser.read(config_file)
@@ -332,6 +295,13 @@ class ScannerConfig:
                                 print(
                                     f"Warning: Invalid integer value in config for {key}: {value}"
                                 )
+                        elif key == "save_response_info":
+                            config_data[key] = value.lower() in [
+                                "true",
+                                "1",
+                                "yes",
+                                "on",
+                            ]
                         else:
                             config_data[key] = value
 
@@ -397,6 +367,8 @@ class ScannerConfig:
                         enabled_parts.add(int(code))
                 if enabled_parts:
                     config_data["tex_scrubbed_parts_codes"] = enabled_parts
+                else:
+                    config_data["tex_scrubbed_parts_codes"] = None
 
             # Read from ARCHIVE_FILE_TYPES section
             if "ARCHIVE_FILE_TYPES" in parser:
@@ -425,9 +397,10 @@ class ScannerConfig:
                                 print(
                                     f"Warning: Invalid integer value in config for {key}: {value}"
                                 )
+                        elif key == "email_tls_method":
+                            config_data[key] = value.strip().lower()
                         elif key in [
                             "email_enabled",
-                            "email_use_tls",
                             "email_skip_tls_verify",
                             "email_imap_enabled",
                             "email_imap_use_ssl",
@@ -441,6 +414,51 @@ class ScannerConfig:
                             ]
                         else:
                             config_data[key] = value
+
+        # 3. Override with environment variables
+        for key in config_data.keys():
+            env_key = env_prefix + key.upper()
+            if env_key in os.environ:
+                value = os.environ[env_key]
+                # Convert types appropriately
+                if key in [
+                    "concurrency",
+                    "seconds_to_wait",
+                    "max_retries",
+                    "max_log_size_mb",
+                    "log_retention_days",
+                    "watch_batch_delay",
+                    "watch_max_batch",
+                    "email_smtp_port",
+                    "email_imap_port",
+                ]:
+                    try:
+                        config_data[key] = int(value)
+                    except ValueError:
+                        print(f"Warning: Invalid integer value for {env_key}: {value}")
+                elif key == "email_tls_method":
+                    config_data[key] = value.strip().lower()
+                elif key in [
+                    "watch_mode",
+                    "email_enabled",
+                    "email_skip_tls_verify",
+                    "email_imap_enabled",
+                    "email_imap_use_ssl",
+                    "email_imap_skip_tls_verify",
+                    "appliance_skip_tls_verify",
+                    "tex_enabled",
+                    "save_response_info",
+                ]:
+                    config_data[key] = value.lower() in ["true", "1", "yes", "on"]
+                elif key in ["archive_extensions", "tex_supported_file_types"]:
+                    config_data[key] = set(v.strip().lower() for v in value.split(",") if v.strip())
+                elif key == "tex_scrubbed_parts_codes":
+                    try:
+                        config_data[key] = set(int(v.strip()) for v in value.split(",") if v.strip())
+                    except ValueError:
+                        print(f"Warning: Invalid integer value for {env_key}: {value}")
+                else:
+                    config_data[key] = value
 
         # 4. Override with command-line arguments (highest priority)
         if cli_args:
@@ -467,7 +485,7 @@ class ScannerConfig:
                 ("email_enabled", "email_enabled"),
                 ("email_smtp_server", "email_smtp_server"),
                 ("email_smtp_port", "email_smtp_port"),
-                ("email_use_tls", "email_use_tls"),
+                ("email_tls_method", "email_tls_method"),
                 ("email_skip_tls_verify", "email_skip_tls_verify"),
                 ("email_username", "email_username"),
                 ("email_from", "email_from"),
@@ -564,7 +582,6 @@ class ScannerConfig:
             "tex_enabled",
             "save_response_info",
             "email_enabled",
-            "email_use_tls",
             "email_skip_tls_verify",
             "email_imap_enabled",
             "email_imap_use_ssl",
@@ -615,8 +632,8 @@ class ScannerConfig:
             print(
                 f"  SMTP server:           {self.email_smtp_server}:{self.email_smtp_port}"
             )
-            print(f"  TLS:                   {'Yes' if self.email_use_tls else 'No'}")
-            if self.email_use_tls:
+            print(f"  TLS method:            {self.email_tls_method}")
+            if self.email_tls_method != "none":
                 print(
                     f"  Skip TLS verify:       {'Yes' if self.email_skip_tls_verify else 'No'}"
                 )

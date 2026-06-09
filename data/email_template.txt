@@ -11,9 +11,6 @@ Summary:
 
 ${file_list}
 ${malicious_files}
-
-Note: ${error} file(s) encountered errors during processing.
-Check logs for details.
-
+${error_note}
 ---
 Server: ${smtp_server}

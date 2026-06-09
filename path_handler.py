@@ -116,7 +116,7 @@ class PathHandler:
                         fs_type = result.stdout.strip().lower()
                         if "cifs" in fs_type or "smb" in fs_type or "nfs" in fs_type:
                             return True
-            except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
+            except (subprocess.TimeoutExpired, FileNotFoundError):
                 # If stat fails or times out, assume not SMB
                 pass
 
@@ -242,9 +242,8 @@ class PathHandler:
                         # Checksum mismatch - delete corrupted destination
                         try:
                             dst.unlink()
-                        except Exception:
-                            logger.debug(f"Failed to delete corrupted destination: {dst}")
-                            pass
+                        except OSError:
+                            logger.warning(f"Failed to delete corrupted destination: {dst}")
                         return (
                             False,
                             "Checksum mismatch after move (corruption detected)",
