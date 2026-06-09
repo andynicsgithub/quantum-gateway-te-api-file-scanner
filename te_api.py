@@ -61,7 +61,7 @@ def _create_zip_manager(config):
 # =======================
 
 
-def main(stop_event=None):
+def main(stop_event=None, cli_args=None):
     """
     MAIN ENTRY POINT
     1. Parse command-line arguments
@@ -220,7 +220,7 @@ def main(stop_event=None):
     )
     parser.add_argument("--tex-response-info-dir", help="TEX response info directory")
     parser.add_argument("--tex-clean-files-dir", help="TEX clean files directory")
-    args = parser.parse_args()
+    args = parser.parse_args(cli_args)
 
     # =======================
     # Load and Validate Config

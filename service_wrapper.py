@@ -92,8 +92,8 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             # Import te_api and run main with watch mode
             import te_api
 
-            # Run main - this will enter watch mode and block until stopped
-            te_api.main(stop_event=self.stop_event)
+            # Run main in watch mode, ignoring any sys.argv from pywin32
+            te_api.main(stop_event=self.stop_event, cli_args=["--watch"])
 
         except Exception as e:
             servicemanager.LogMsg(
