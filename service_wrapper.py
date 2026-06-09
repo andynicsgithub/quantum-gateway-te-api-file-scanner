@@ -25,6 +25,7 @@ Security:
 """
 
 import os
+import threading
 
 try:
     import win32serviceutil
@@ -63,20 +64,15 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             args: Command-line arguments passed to service
         """
         win32serviceutil.ServiceFramework.__init__(self, args)
-        # Event to signal stop
-        self.hWaitStop = win32event.CreateEvent(None, 0, 0, None)
-        self.is_running = False
+        self.stop_event = threading.Event()
 
     def SvcStop(self):
         """
         Handle service stop request.
         Immediate stop (as per requirements - no graceful batch completion).
         """
-        self.is_running = False
-        self.ReportServiceStatus(win32service.SERVICE_STOP_PENDING)
-        # Signal the event to wake up the main loop
-        win32event.SetEvent(self.hWaitStop)
-        # Note: We don't wait for batch completion - immediate exit
+        self.stop_event.set()
+        self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
     def SvcDoRun(self):
         """
@@ -88,25 +84,16 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
             ("%s" % self._service_name),
         )
 
-        self.is_running = True
-
         try:
             # Change to script directory so config.ini is found
             script_dir = os.path.dirname(os.path.abspath(__file__))
             os.chdir(script_dir)
 
             # Import te_api and run main with watch mode
-            # We modify sys.argv to simulate command-line arguments
             import te_api
-            import sys
-
-            # Ensure --watch is in sys.argv so the service always runs in watch mode
-            if "--watch" not in sys.argv:
-                sys.argv.append("--watch")
 
             # Run main - this will enter watch mode and block until stopped
-            # The SvcStop handler will set the event and return
-            te_api.main()
+            te_api.main(stop_event=self.stop_event)
 
         except Exception as e:
             servicemanager.LogMsg(
@@ -115,14 +102,6 @@ class TEWatcherService(win32serviceutil.ServiceFramework):
                 ("%s: %s" % (self._service_name, str(e))),
             )
             self.ReportServiceStatus(win32service.SERVICE_STOPPED)
-
-    def SvcPause(self):
-        """Handle pause request - not supported."""
-        self.ReportServiceStatus(win32service.SERVICE_STOPPED)
-
-    def SvcContinue(self):
-        """Handle continue request - not supported."""
-        self.ReportServiceStatus(win32service.SERVICE_STOPPED)
 
 
 def main():

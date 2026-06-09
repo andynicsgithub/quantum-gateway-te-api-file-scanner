@@ -112,6 +112,12 @@ sc start TEWatcher
 # Check status
 sc query TEWatcher
 
+# Stop the service
+sc stop TEWatcher
+
+# Remove the service (run as Administrator)
+python service_wrapper.py remove
+
 # View logs in Event Viewer
 eventvwr.msc → Windows Logs → Application → Source: TEWatcher
 ```

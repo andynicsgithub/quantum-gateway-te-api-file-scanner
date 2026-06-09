@@ -291,7 +291,7 @@ class WatcherThread:
         return self.watcher.get_pending_count()
 
 
-def start_watching(config, url, url_tex=""):
+def start_watching(config, url, url_tex="", stop_event=None):
     """
     Start file watching (blocking call).
 
@@ -430,7 +430,12 @@ def start_watching(config, url, url_tex=""):
         check_interval = 2
 
         while True:
-            time.sleep(check_interval)
+            if stop_event:
+                stop_event.wait(check_interval)
+                if stop_event.is_set():
+                    break
+            else:
+                time.sleep(check_interval)
 
             now = time.time()
             watcher_thread.watcher._check_batch_ready()

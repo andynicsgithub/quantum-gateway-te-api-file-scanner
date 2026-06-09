@@ -61,7 +61,7 @@ def _create_zip_manager(config):
 # =======================
 
 
-def main():
+def main(stop_event=None):
     """
     MAIN ENTRY POINT
     1. Parse command-line arguments
@@ -319,7 +319,7 @@ def main():
         from file_watcher import start_watching
 
         try:
-            start_watching(config, url, url_tex)
+            start_watching(config, url, url_tex, stop_event=stop_event)
         except Exception as e:
             logger.error(f"ERROR starting watcher: {e}")
             import traceback
