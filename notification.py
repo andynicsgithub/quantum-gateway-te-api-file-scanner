@@ -16,6 +16,7 @@ from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
+from email.utils import format_datetime
 from string import Template
 
 _SCRIPT_DIR = Path(__file__).resolve().parent
@@ -52,6 +53,7 @@ def send_batch_notification(config, summary):
         msg["From"] = config.email_from
         msg["To"] = config.email_to
         msg["Subject"] = subject
+        msg["Date"] = format_datetime(datetime.now().astimezone(), usegmt=False)
         msg.attach(MIMEText(body, "plain"))
 
         # Send via SMTP
@@ -356,6 +358,7 @@ def _save_to_imap(config, body, subject):
             "Subject: {}".format(Header(subject, "utf-8")),
             "From: {}".format(Header(config.email_from, "utf-8")),
             "To: {}".format(Header(config.email_to, "utf-8")),
+            "Date: {}".format(format_datetime(datetime.now().astimezone(), usegmt=False)),
             "",
         ]
         raw_lines.append(body)
