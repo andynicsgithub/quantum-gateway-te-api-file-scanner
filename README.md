@@ -102,18 +102,18 @@ For production use, run the scanner as a service so it starts automatically and 
 # Install the service (run as Administrator)
 python service_wrapper.py install
 
-# Configure with auto-start and auto-restart
-sc config TEWatcher start=auto
-sc config TEWatcher failure=restart/restart/restart
+# Configure with auto-start and auto-restart (note: use sc.exe to avoid PowerShell alias conflict)
+sc.exe config TEWatcher start= auto
+sc.exe config TEWatcher failure= restart/restart/restart
 
 # Start the service
-sc start TEWatcher
+sc.exe start TEWatcher
 
 # Check status
-sc query TEWatcher
+sc.exe query TEWatcher
 
 # Stop the service
-sc stop TEWatcher
+sc.exe stop TEWatcher
 
 # Remove the service (run as Administrator)
 python service_wrapper.py remove
