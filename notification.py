@@ -344,7 +344,7 @@ def _save_to_imap(config, body, subject):
                 ssl_ctx = ssl.create_default_context()
 
             imap_conn = imaplib.IMAP4_SSL(
-                imap_server, imap_port, context=ssl_ctx, timeout=30
+                imap_server, imap_port, ssl_context=ssl_ctx, timeout=30
             )
         else:
             imap_conn = imaplib.IMAP4(imap_server, imap_port, timeout=30)
