@@ -84,6 +84,9 @@ class ScannerConfig:
     tex_supported_file_types: Set[str] = field(default_factory=set)
     tex_scrubbed_parts_codes: Set[int] = field(default_factory=set)
 
+    # OS images for TE analysis: list of dicts with keys "id", "revision", "name", "is_default", "enabled"
+    os_images: List[dict] = field(default_factory=list)
+
     save_response_info: bool = True
 
     # Logging configuration
@@ -234,6 +237,7 @@ class ScannerConfig:
             "tex_scrubbed_parts_codes": set(),
             "archive_extensions": set(),
             "save_response_info": True,
+            "os_images": [],
         }
 
         # 2. Override with config file
@@ -417,6 +421,35 @@ class ScannerConfig:
                             ]
                         else:
                             config_data[key] = value
+
+            # Read from OS_IMAGES section
+            if "OS_IMAGES" in parser:
+                section = parser["OS_IMAGES"]
+                # Collect all indices (1, 2, 3, ...) that have a name entry
+                indices = set()
+                for key in section:
+                    if key.startswith("name."):
+                        idx = key.split(".")[1]
+                        indices.add(idx)
+
+                if indices:
+                    os_images_list = []
+                    for idx in sorted(indices, key=int):
+                        name_val = section.get(f"name.{idx}", "").strip()
+                        id_val = section.get(f"id.{idx}", "").strip()
+                        is_default_val = section.get(f"is_default.{idx}", "false").strip().lower()
+                        enabled_val = section.get(f"enabled.{idx}", "false").strip().lower()
+
+                        if id_val:  # Only add if we have an ID
+                            os_images_list.append({
+                                "id": id_val,
+                                "revision": 1,
+                                "name": name_val,
+                                "is_default": is_default_val in ("true", "1", "yes", "on"),
+                                "enabled": enabled_val in ("true", "1", "yes", "on"),
+                            })
+                    if os_images_list:
+                        config_data["os_images"] = os_images_list
 
         # 3. Override with environment variables
         for key in config_data.keys():

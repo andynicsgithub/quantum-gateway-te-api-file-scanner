@@ -105,14 +105,25 @@ class TE(object):
         self.report_id = ""
         self._tex_status = None
         self.logger = logging.getLogger("te_scanner.file_handler")
+        # Build the images list from config - only enabled images
+        enabled_images = []
+        if config and config.os_images:
+            for img in config.os_images:
+                if img.get("enabled", False):
+                    enabled_images.append({
+                        "id": img["id"],
+                        "revision": img.get("revision", 1),
+                    })
         self.request_template = {
             "request": [
                 {
                     "features": ["te", "te_eb"],
                     "te": {
+                        "images": enabled_images,
                         "reports": ["summary"],
-                        "version_info": True,
+                        "reports_version_number": 2,
                         "return_errors": True,
+                        "version_info": True,
                     },
                 }
             ]
