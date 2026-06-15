@@ -403,9 +403,12 @@ def start_watching(config, url, url_tex="", stop_event=None):
         if batch_zip_mgr:
             batch_zip_mgr.close()
 
-        # Send email notification after batch completes
+  # Send email notification after batch completes
         try:
-            send_batch_notification(config, batch_summary)
+            if config.email_enabled and (
+                not config.email_malicious_only or batch_summary["malicious"] > 0
+            ):
+                send_batch_notification(config, batch_summary)
         except Exception as e:
             batch_logger.warning(f"Email notification failed: {e}")
 

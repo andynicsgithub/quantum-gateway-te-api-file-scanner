@@ -189,7 +189,8 @@ email_imap_folder = Sent
 | Setting | Description | Default |
 |---------|-------------|---------|
 | `email_enabled` | Enable email notifications | false |
-| `email_smtp_server` | SMTP server hostname or IP | - |
+    | `email_malicious_only` | Send email only when malicious files are found | false |
+    | `email_smtp_server` | SMTP server hostname or IP | - |
 | `email_smtp_port` | SMTP server port | 587 |
 | `email_tls_method` | SMTP TLS method: `none`, `starttls`, or `smtp_ssl` | `starttls` |
 | `email_username` | SMTP authentication username | - |
@@ -247,7 +248,8 @@ Server: ${smtp_server}
 | Option | Description |
 |--------|-------------|
 | `--email-enabled` | Enable email notifications |
-| `--email-smtp-server HOST` | SMTP server hostname or IP |
+    | `--email-malicious-only` | Only send email if at least one malicious file is found |
+    | `--email-smtp-server HOST` | SMTP server hostname or IP |
 | `--email-smtp-port PORT` | SMTP server port |
 | `--email-tls-method METHOD` | SMTP TLS method: `none`, `starttls`, or `smtp_ssl` |
 | `--email-username USER` | SMTP authentication username |

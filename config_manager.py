@@ -45,6 +45,7 @@ class ScannerConfig:
 
     # Email notification configuration
     email_enabled: bool = False
+    email_malicious_only: bool = False
     email_smtp_server: str = ""
     email_smtp_port: int = 587
     email_tls_method: str = "starttls"
@@ -203,6 +204,7 @@ class ScannerConfig:
             "max_log_size_mb": 10,
             "log_retention_days": 90,
             "email_enabled": False,
+            "email_malicious_only": False,
             "email_smtp_server": "",
             "email_smtp_port": 587,
             "email_tls_method": "starttls",
@@ -403,8 +405,9 @@ class ScannerConfig:
                             "email_enabled",
                             "email_skip_tls_verify",
                             "email_imap_enabled",
-                            "email_imap_use_ssl",
+                 "email_imap_use_ssl",
                             "email_imap_skip_tls_verify",
+                            "email_malicious_only",
                         ]:
                             config_data[key] = value.lower() in [
                                 "true",
@@ -443,8 +446,9 @@ class ScannerConfig:
                     "email_enabled",
                     "email_skip_tls_verify",
                     "email_imap_enabled",
-                    "email_imap_use_ssl",
+ "email_imap_use_ssl",
                     "email_imap_skip_tls_verify",
+                    "email_malicious_only",
                     "appliance_skip_tls_verify",
                     "tex_enabled",
                     "save_response_info",
@@ -491,8 +495,9 @@ class ScannerConfig:
                 ("email_from", "email_from"),
                 ("email_to", "email_to"),
                 ("email_subject_template", "email_subject_template"),
-                ("email_template_file", "email_template_file"),
-                ("email_imap_enabled", "email_imap_enabled"),
+("email_template_file", "email_template_file"),
+            ("email_malicious_only", "email_malicious_only"),
+            ("email_imap_enabled", "email_imap_enabled"),
                 ("email_imap_server", "email_imap_server"),
                 ("email_imap_port", "email_imap_port"),
                 ("email_imap_use_ssl", "email_imap_use_ssl"),
@@ -584,8 +589,9 @@ class ScannerConfig:
             "email_enabled",
             "email_skip_tls_verify",
             "email_imap_enabled",
-            "email_imap_use_ssl",
+ "email_imap_use_ssl",
             "email_imap_skip_tls_verify",
+            "email_malicious_only",
         ]
         for key in _bool_fields:
             if key in config_data and not isinstance(config_data[key], bool):
@@ -628,6 +634,8 @@ class ScannerConfig:
 
         print("Email Notification:")
         print(f"  Enabled:               {'Yes' if self.email_enabled else 'No'}")
+        if self.email_enabled and self.email_malicious_only:
+            print(f"  Malicious only:        Yes")
         if self.email_enabled:
             print(
                 f"  SMTP server:           {self.email_smtp_server}:{self.email_smtp_port}"

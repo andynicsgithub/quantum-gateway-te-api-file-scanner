@@ -179,6 +179,11 @@ def main(stop_event=None, cli_args=None):
     parser.add_argument(
         "--email-template-file", help="Path to email body template file"
     )
+    parser.add_argument(
+        "--email-malicious-only",
+        action="store_true",
+        help="Only send email if at least one malicious file is found",
+    )
     # IMAP "Sent" folder CLI args
     parser.add_argument(
         "--email-imap-enabled",

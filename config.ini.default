@@ -53,6 +53,9 @@ watch_max_batch = 0
 # Set enabled=true to activate notifications
 email_enabled = false
 
+# Send email only when malicious files are found (default: false = every batch)
+email_malicious_only = false
+
 # SMTP settings
 email_smtp_server =
 email_smtp_port = 587
