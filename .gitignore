@@ -16,9 +16,6 @@ venv/
 
 # Local configuration files (template is config.ini.default)
 config.ini
-CODE_ANALYSIS.md
-DEV_LOG.md
-.local_analysis.md
 
 # Test directories (auto-generated)
 test_benign/
@@ -30,17 +27,6 @@ test_reports/
 # Log files
 logs/
 *.log
-
-# Agent/LLM config files
-AGENTS.md
-CLAUDE.md
-report.md
-ROADMAP.md
-.opencode/
-graphify-out/
-RECAP.md
-REPORT.md
-ziplogic.md
 
 # IDE and editor files
 .idea/
