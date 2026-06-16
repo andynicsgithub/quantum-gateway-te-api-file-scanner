@@ -91,52 +91,18 @@ email_imap_folder = Sent
 email_imap_skip_tls_verify = false
 
 [OS_IMAGES]
-# OS images for TE analysis. Each image has a name, ID, default status, and enabled flag.
-# - name: Display name (informational)
-# - id: Image UUID sent to the TE API
-# - is_default: Set by Check Point; **DEFAULT images are the appliance defaults
-# - enabled: Set true to include this image in API requests (omit images entirely to use appliance defaults)
+# OS image selection for TE sandbox analysis.
+# Set each image to true to include it in analysis, false to exclude.
+# If no images are enabled or this section is omitted, the API server uses its own default images.
 #
-# WinXP 32b, Office 2003/7, Acrobat 9.0         (is_default)
-name.1 = WinXP 32b, Office 2003/7, Acrobat 9.0
-id.1 = e50e99f3-5963-4573-af9e-e3f4750b55e2
-is_default.1 = true
-enabled.1 = true
-# Win7 32b, Office 2003/7, Acrobat 9.0
-name.2 = Win7 32b, Office 2003/7, Acrobat 9.0
-id.2 = 7e6fe36e-889e-4c25-8704-56378f0830df
-is_default.2 = false
-enabled.2 = false
-# Win7 32b, Office 2010, Acrobat 9.4
-name.3 = Win7 32b, Office 2010, Acrobat 9.4
-id.3 = 8d188031-1010-4466-828b-0cd13d4303ff
-is_default.3 = false
-enabled.3 = false
-# Win7 32b, Office 2013, Acrobat 11.0          (is_default)
-name.4 = Win7 32b, Office 2013, Acrobat 11.0
-id.4 = 5e5de275-a103-4f67-b55b-47532918fa59
-is_default.4 = true
-enabled.4 = true
-# Win7 64b, Office 2010, Acrobat 11.0.01
-name.5 = Win7 64b, Office 2010, Acrobat 11.0.01
-id.5 = 3ff3ddae-e7fd-4969-818c-d5f1a2be336d
-is_default.5 = false
-enabled.5 = false
-# Win8.1 64b, Office 2013, Acrobat 11.0.10
-name.6 = Win8.1 64b, Office 2013, Acrobat 11.0.10
-id.6 = 6c453c9b-20f7-471a-956c-3198a868dc92
-is_default.6 = false
-enabled.6 = false
-# Win10 64b, Office 2016, Acrobat DC 2015
-name.7 = Win10 64b, Office 2016, Acrobat DC 2015
-id.7 = 10b4a9c6-e414-425c-ae8b-fe4dd7b2524
-is_default.7 = false
-enabled.7 = false
-# Win11_64bit, Office 2021, Acrobat DC          (is_default)
-name.8 = Win11_64bit, Office 2021, Acrobat DC
-id.8 = 1108f8e1-2def-457d-901b-056d954c47fc
-is_default.8 = false
-enabled.8 = false
+e50e99f3-5963-4573-af9e-e3f4750b55e2 = true    # WinXP 32b, Office 2003/7, Acrobat 9.0 [DEFAULT]
+7e6fe36e-889e-4c25-8704-56378f0830df = false   # Win7 32b, Office 2003/7, Acrobat 9.0
+8d188031-1010-4466-828b-0cd13d4303ff = false   # Win7 32b, Office 2010, Acrobat 9.4
+5e5de275-a103-4f67-b55b-47532918fa59 = true    # Win7 32b, Office 2013, Acrobat 11.0 [DEFAULT]
+3ff3ddae-e7fd-4969-818c-d5f1a2be336d = false   # Win7 64b, Office 2010, Acrobat 11.0.01
+6c453c9b-20f7-471a-956c-3198a868dc92 = false   # Win8.1 64b, Office 2013, Acrobat 11.0.10
+10b4a9c6-e414-425c-ae8b-fe4dd7b2524e = false   # Win10 64b, Office 2016, Acrobat DC 2015
+1108f8e1-2def-457d-901b-056d954c47fc = false   # Win11 64bit, Office 2021, Acrobat DC
 
 [TEX]
 tex_enabled = false

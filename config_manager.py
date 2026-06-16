@@ -7,6 +7,7 @@ Supports loading from config file, command-line arguments, and environment varia
 """
 
 import os
+import re
 import configparser
 import argparse
 import logging
@@ -422,34 +423,46 @@ class ScannerConfig:
                         else:
                             config_data[key] = value
 
-            # Read from OS_IMAGES section
+            # Read from OS_IMAGES section - manual parsing to preserve inline comments
             if "OS_IMAGES" in parser:
-                section = parser["OS_IMAGES"]
-                # Collect all indices (1, 2, 3, ...) that have a name entry
-                indices = set()
-                for key in section:
-                    if key.startswith("name."):
-                        idx = key.split(".")[1]
-                        indices.add(idx)
+                os_images_list = []
+                uuid_pattern = re.compile(
+                    r'^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})\s*=\s*(true|false)\s*(#.*)?$'
+                )
 
-                if indices:
-                    os_images_list = []
-                    for idx in sorted(indices, key=int):
-                        name_val = section.get(f"name.{idx}", "").strip()
-                        id_val = section.get(f"id.{idx}", "").strip()
-                        is_default_val = section.get(f"is_default.{idx}", "false").strip().lower()
-                        enabled_val = section.get(f"enabled.{idx}", "false").strip().lower()
+                try:
+                    with open(config_file, "r") as f:
+                        in_section = False
+                        for line in f:
+                            stripped = line.strip()
+                            if stripped == "[OS_IMAGES]":
+                                in_section = True
+                                continue
+                            elif stripped and stripped[0] == "[" and stripped[-1] == "]":
+                                in_section = False
+                                continue
+                            if in_section and stripped and not stripped.startswith("#"):
+                                match = uuid_pattern.match(stripped)
+                                if match:
+                                    uuid_val = match.group(1).lower()
+                                    enabled_val = match.group(2).lower() == "true"
+                                    comment = match.group(3) or ""
+                                    name = comment.lstrip("#").strip()
+                                    is_default = "[DEFAULT]" in name
+                                    if is_default:
+                                        name = name.replace("[DEFAULT]", "").strip()
+                                    os_images_list.append({
+                                        "id": uuid_val,
+                                        "revision": 1,
+                                        "name": name,
+                                        "is_default": is_default,
+                                        "enabled": is_default or enabled_val,
+                                    })
+                except (IOError, OSError):
+                    pass
 
-                        if id_val:  # Only add if we have an ID
-                            os_images_list.append({
-                                "id": id_val,
-                                "revision": 1,
-                                "name": name_val,
-                                "is_default": is_default_val in ("true", "1", "yes", "on"),
-                                "enabled": enabled_val in ("true", "1", "yes", "on"),
-                            })
-                    if os_images_list:
-                        config_data["os_images"] = os_images_list
+                if os_images_list:
+                    config_data["os_images"] = os_images_list
 
         # 3. Override with environment variables
         for key in config_data.keys():
