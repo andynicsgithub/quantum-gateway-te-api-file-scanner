@@ -2,7 +2,8 @@
 #
 # reset_directories.sh - Bash script to reset directories based on config.ini
 # Moves files from benign/quarantine/error back to input preserving structure
-# Empties reports directory completely. No logging, prints operations and summary.
+# Empties reports, tex_clean_files, and zip_archive directories completely.
+# No logging, prints operations and summary.
 #
 # Usage: ./reset_directories.sh [config_file]
 #
@@ -11,7 +12,7 @@ set -e
 
 CONFIG_FILE="${1:-config.ini}"
 
-# Function to read INI file and output key=value pairs
+# Read INI values from [DEFAULT] and [TEX] sections only, output as quoted key=value
 read_ini() {
     local file="$1"
     if [[ ! -f "$file" ]]; then
@@ -19,26 +20,54 @@ read_ini() {
         exit 1
     fi
 
-    while IFS='=' read -r key value; do
+    local in_default=false
+    local in_tex=false
+
+    while IFS= read -r raw_line; do
         # Remove carriage returns (Windows line endings)
-        key="${key//$'\r'/}"
-        value="${value//$'\r'/}"
-        
-        [[ -z "$key" ]] && continue
+        raw_line="${raw_line//$'\r'/}"
+
+        # Remove leading/trailing whitespace
+        local line="${raw_line#"${raw_line%%[![:space:]]*}"}"
+        line="${line%"${line##*[![:space:]]}"}"
+
+        [[ -z "$line" ]] && continue
 
         # Skip comments
-        [[ "$key" =~ ^[[:space:]]*[#\;] ]] && continue
+        [[ "$line" =~ ^[#\;] ]] && continue
 
-        # Skip section headers
-        [[ "$key" =~ ^\[.*\]$ ]] && continue
+        # Section header
+        if [[ "$line" =~ ^\[.*\]$ ]]; then
+            if [[ "$line" == "[DEFAULT]" ]]; then
+                in_default=true
+                in_tex=false
+            elif [[ "$line" == "[TEX]" ]]; then
+                in_tex=true
+                in_default=false
+            else
+                in_default=false
+                in_tex=false
+            fi
+            continue
+        fi
 
-        # Trim whitespace
-        key="${key// /}"
-        value="${value// /}"
+        # Only process lines from [DEFAULT] or [TEX]
+        if [[ "$in_default" == true || "$in_tex" == true ]]; then
+            # Split on first = only
+            local key="${line%%=*}"
+            local value="${line#*=}"
 
-        [[ -z "$key" ]] && continue
+            # Trim whitespace
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
 
-        echo "config_${key}=${value}"
+            [[ -z "$key" ]] && continue
+
+            # Quote the value to handle special chars (=, /, #, etc.)
+            echo "config_${key}='${value}'"
+        fi
     done < "$file"
 }
 
@@ -67,20 +96,17 @@ move_with_structure() {
     while IFS= read -r -d '' file; do
         local rel="${file#"$src"/}"
         local dest_file="$dst/$rel"
-        
-        # Check if file is in a subdirectory
+
         if [[ "$rel" == */* ]]; then
-            # File is in a subdirectory, preserve structure
             local dest_dir="$dst/${rel%/*}"
             mkdir -p "$dest_dir"
             mv -f "$file" "$dest_dir/"
         else
-            # File is in root, move directly to destination
             mv -f "$file" "$dst/"
         fi
-        
+
         echo "Moved $rel" >&2
-        ((count++))
+        ((count++)) || true
     done < <(find "$src" -type f -print0 2>/dev/null)
 
     echo "$count"
@@ -117,7 +143,6 @@ echo "Configuration:"
 echo "  Config file: $CONFIG_FILE"
 echo ""
 
-# Source the parsed INI values into the current shell
 eval "$(read_ini "$CONFIG_FILE")"
 
 input=$(expand_path "$config_input_directory")
@@ -125,17 +150,23 @@ benign=$(expand_path "$config_benign_directory")
 quarantine=$(expand_path "$config_quarantine_directory")
 error=$(expand_path "$config_error_directory")
 reports=$(expand_path "$config_reports_directory")
+tex_clean_files=$(expand_path "$config_tex_clean_files_directory")
+zip_archive=$(expand_path "$config_zip_archive_directory")
 
-echo "  input:       $input"
-echo "  benign:      $benign"
-echo "  quarantine:  $quarantine"
-echo "  error:       $error"
-echo "  reports:     $reports"
+echo "  input:              $input"
+echo "  benign:             $benign"
+echo "  quarantine:         $quarantine"
+echo "  error:              $error"
+echo "  reports:            $reports"
+echo "  tex_clean_files:    $tex_clean_files"
+echo "  zip_archive:        $zip_archive"
 echo ""
 
 echo "Actions to be performed:"
 echo "  * Move all files from benign/quarantine/error into input (keeping folder structure)."
 echo "  * Completely empty the reports directory."
+echo "  * Completely empty the tex_clean_files directory."
+echo "  * Completely empty the zip_archive directory (if configured)."
 echo ""
 
 read -rp "Proceed with these actions? (yes/no): " response
@@ -160,6 +191,14 @@ echo ""
 
 removed=$(clear_directory "$reports")
 echo "Removed $removed items from reports directory"
+
+removed=$(clear_directory "$tex_clean_files")
+echo "Removed $removed items from tex_clean_files directory"
+
+if [[ -n "$zip_archive" ]]; then
+    removed=$(clear_directory "$zip_archive")
+    echo "Removed $removed items from zip_archive directory"
+fi
 
 echo ""
 echo "Done."
