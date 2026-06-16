@@ -757,7 +757,7 @@ class TE(object):
                         break
                     dst_f.write(chunk)
             self.logger.info(
-                f"Copied {self.log_path} to temp for zip: {verdict_basename}/{self.sub_dir}/{self.file_name}"
+                f"Copied {self.log_path} to temp for zip: {('/').join(filter(None, [verdict_basename, self.sub_dir, self.file_name]))}"
             )
         except Exception as e:
             self.logger.error(
