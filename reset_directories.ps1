@@ -1,6 +1,7 @@
 # PowerShell script to reset directories based on config.ini
 # Moves files from benign/quarantine/error back to input preserving structure
-# Empties reports directory completely. No logging, prints operations and summary.
+# Empties reports, tex_clean_files, and zip_archive directories completely.
+# No logging, prints operations and summary.
 
 param(
     [string]$ConfigFile = "config.ini"
@@ -10,12 +11,36 @@ function Read-Ini {
     param([string]$Path)
     if (-not (Test-Path $Path)) { throw "Config file not found: $Path" }
     $hash = @{}
+    $inDefault = $false
+    $inTex = $false
+
     foreach ($line in Get-Content $Path) {
-        $line = $line.Trim()
+        # Remove carriage returns and trim
+        $line = $line.Trim().Replace("`r", "")
+
         if ($line -eq '' -or $line.StartsWith('#') -or $line.StartsWith(';')) { continue }
-        if ($line -match '^\[.*\]$') { continue }
-        if ($line -match '^([^=]+)=(.*)$') {
-            $k = $Matches[1].Trim(); $v = $Matches[2].Trim(); $hash[$k] = $v
+        if ($line -match '^\[(.+)\]$') {
+            $section = $Matches[1].Trim()
+            if ($section -eq 'DEFAULT') {
+                $inDefault = $true
+                $inTex = $false
+            } elseif ($section -eq 'TEX') {
+                $inTex = $true
+                $inDefault = $false
+            } else {
+                $inDefault = $false
+                $inTex = $false
+            }
+            continue
+        }
+
+        # Only process lines from [DEFAULT] or [TEX]
+        if ($inDefault -or $inTex) {
+            if ($line -match '^([^=]+)=(.*)$') {
+                $k = $Matches[1].Trim()
+                $v = $Matches[2].Trim()
+                $hash[$k] = $v
+            }
         }
     }
     return $hash
@@ -25,7 +50,7 @@ function Expand-PathString {
     param([string]$s)
     if (-not $s) { return $s }
     $expanded = [System.Environment]::ExpandEnvironmentVariables($s)
-    $expanded = $expanded -replace '^~',$env:USERPROFILE
+    $expanded = $expanded -replace '^~', $env:USERPROFILE
     return $expanded
 }
 
@@ -37,7 +62,7 @@ function Move-WithStructure {
     if (-not (Test-Path $src)) { return 0 }
     $count = 0
     Get-ChildItem -Path $src -File -Recurse | ForEach-Object {
-        $rel = $_.FullName.Substring($src.Length).TrimStart('\\')
+        $rel = $_.FullName.Substring($src.Length).TrimStart('\')
         $dest = Join-Path -Path $dst -ChildPath $rel
         $dird = Split-Path -Path $dest -Parent
         if (-not (Test-Path $dird)) { New-Item -ItemType Directory -Path $dird -Force | Out-Null }
@@ -61,25 +86,34 @@ function Clear-Directory {
 
 # main
 $config = Read-Ini -Path $ConfigFile
+
 $input = Expand-PathString $config['input_directory']
 $benign = Expand-PathString $config['benign_directory']
 $quarantine = Expand-PathString $config['quarantine_directory']
 $error = Expand-PathString $config['error_directory']
 $reports = Expand-PathString $config['reports_directory']
+$texCleanFiles = Expand-PathString $config['tex_clean_files_directory']
+$zipArchive = Expand-PathString $config['zip_archive_directory']
 
 Write-Host "Configuration:"
-Write-Host "  input:       $input"
-Write-Host "  benign:      $benign"
-Write-Host "  quarantine:  $quarantine"
-Write-Host "  error:       $error"
-Write-Host "  reports:     $reports"
+Write-Host "  input:              $input"
+Write-Host "  benign:             $benign"
+Write-Host "  quarantine:         $quarantine"
+Write-Host "  error:              $error"
+Write-Host "  reports:            $reports"
+Write-Host "  tex_clean_files:    $texCleanFiles"
+Write-Host "  zip_archive:        $zipArchive"
 Write-Host ""
 Write-Host "Actions to be performed:"
 Write-Host "  * Move all files from benign/quarantine/error into input (keeping folder structure)."
 Write-Host "  * Completely empty the reports directory."
+Write-Host "  * Completely empty the tex_clean_files directory."
+Write-Host "  * Completely empty the zip_archive directory (if configured)."
 Write-Host ""
 $resp = Read-Host "Proceed with these actions? (yes/no)"
 if ($resp -ne 'yes') { Write-Host "Cancelled."; exit 0 }
+
+Write-Host ""
 
 $tot = 0
 $tot += Move-WithStructure -src $benign -dst $input
@@ -87,7 +121,18 @@ $tot += Move-WithStructure -src $quarantine -dst $input
 $tot += Move-WithStructure -src $error -dst $input
 Write-Host "Moved a total of $tot files into $input"
 
+Write-Host ""
+
 $del = Clear-Directory -dir $reports
 Write-Host "Removed $del items from reports directory"
 
+$del = Clear-Directory -dir $texCleanFiles
+Write-Host "Removed $del items from tex_clean_files directory"
+
+if ($zipArchive) {
+    $del = Clear-Directory -dir $zipArchive
+    Write-Host "Removed $del items from zip_archive directory"
+}
+
+Write-Host ""
 Write-Host "Done."
