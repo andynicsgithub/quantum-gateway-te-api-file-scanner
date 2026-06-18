@@ -718,7 +718,7 @@ def _move_file_to_error(file_name, sub_dir, full_path, config):
 
     error_dest.parent.mkdir(parents=True, exist_ok=True)
     try:
-        PathHandler.safe_move(full_path, str(error_dest))
+        PathHandler.safe_move(Path(full_path), error_dest)
         logger.info(f"Moved to error: {display_name}")
     except Exception as e:
         logger.error(f"Failed to move {display_name} to error directory: {e}")
