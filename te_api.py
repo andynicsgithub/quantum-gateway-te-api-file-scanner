@@ -613,7 +613,7 @@ def process_discovered_files(
                                           zip_path=zip_path, zip_pwd=zip_pwd,
                                           temp_dir=temp_dir)
                     else:
-                        zip_mgr.add_file(full_path, file_name, config.benign_directory.name)
+                        zip_mgr.add_file(full_path, 'error', sub_dir, file_name)
                 # Move file to error directory
                 _move_file_to_error(file_name, sub_dir, full_path, config)
                 all_files.append({
