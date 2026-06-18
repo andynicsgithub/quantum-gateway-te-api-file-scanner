@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v11.2 (alpha)
+file_watcher.py v12.0 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)
@@ -19,7 +19,12 @@ from datetime import datetime
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
-from te_api import process_single_file, find_and_delete_empty_subdirectories
+from te_api import (
+    process_single_file,
+    find_and_delete_empty_subdirectories,
+    TE_FILE_SIZE_LIMIT,
+)
+from path_handler import PathHandler
 
 
 class CopyCompletionWatcher(FileSystemEventHandler):
@@ -243,6 +248,30 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         return len(self.pending_files)
 
 
+def _move_to_error_in_watch(file_name, sub_dir, full_path, config, batch_logger):
+    """Move a file to the error directory during watch mode.
+
+    Args:
+        file_name: Original filename
+        sub_dir: Subdirectory relative to input
+        full_path: Full local path to the file
+        config: ScannerConfig object
+        batch_logger: Logger instance
+    """
+    try:
+        error_sub = str(Path(full_path).parent.relative_to(config.input_directory))
+        if error_sub == ".":
+            error_sub = ""
+        error_path = config.error_directory / error_sub / file_name
+        PathHandler.safe_move(full_path, str(error_path))
+        display = f"{error_sub}/{file_name}" if error_sub else file_name
+        batch_logger.info(f"Moved {display} to error directory")
+    except Exception as move_error:
+        batch_logger.error(
+            f"Failed to move {file_name} to error directory: {move_error}"
+        )
+
+
 class WatcherThread:
     """
     Thread-safe wrapper for watchdog Observer with graceful shutdown.
@@ -350,14 +379,97 @@ def start_watching(config, url, url_tex="", stop_event=None):
                 if sub_dir == ".":
                     sub_dir = ""
 
-                display_path = PathHandler.display_path(file_name, sub_dir)
-                batch_logger.info(f"Processing: {display_path}")
+                # Check file size for AV fallback routing
+                try:
+                    file_size = os.path.getsize(full_path)
+                except OSError:
+                    file_size = 0
 
-                result = process_single_file(
-                    file_name, safe_file_name, sub_dir, full_path,
-                    config, url, url_tex,
-                    batch_zip_mgr,
-                )
+                if file_size >= TE_FILE_SIZE_LIMIT:
+                    # Large file — route to AV or error directory
+                    display_path = PathHandler.display_path(file_name, sub_dir)
+                    batch_logger.info(
+                        f"Large file detected: {display_path} ({file_size / (1024*1024):.1f} MB)"
+                    )
+
+                    if config.av_fallback_enabled:
+                        # Route to AV fallback
+                        try:
+                            from av_handler import AVHandler
+                            with AVHandler(config) as av:
+                                result = av.process_file(
+                                    file_name, safe_file_name, sub_dir,
+                                    full_path, batch_zip_mgr,
+                                )
+                        except ImportError:
+                            batch_logger.error(
+                                f"AV fallback enabled but paramiko not installed: {file_name}"
+                            )
+                            result = {
+                                "name": file_name,
+                                "path": sub_dir if sub_dir else "",
+                                "verdict": "Error",
+                                "status": "error",
+                                "tex_status": None,
+                                "av_verdict": "paramiko_not_installed",
+                            }
+                            _move_to_error_in_watch(
+                                file_name, sub_dir, full_path, config, batch_logger
+                            )
+
+                        # Log AV verdict outcome
+                        verdict = result.get("verdict", "Unknown")
+                        av_verdict = result.get("av_verdict", "")
+                        if av_verdict == "Transfer_Failed":
+                            batch_logger.error(
+                                f"AV transfer failed for {display_path} — "
+                                "file stays in input"
+                            )
+                        elif av_verdict == "Skipped_Above_AV_Limit":
+                            batch_logger.warning(
+                                f"AV skipped for {display_path} "
+                                f"({file_size / (1024*1024*1024):.1f} GB > 2 GB limit)"
+                            )
+                        elif verdict == "Malicious":
+                            batch_logger.warning(
+                                f"AV MALICIOUS: {display_path} — "
+                                f"verdict: {verdict} (action: drop)"
+                            )
+                        elif verdict == "Benign":
+                            batch_logger.info(
+                                f"AV benign: {display_path} (action: accept)"
+                            )
+                        elif verdict == "Error":
+                            batch_logger.warning(
+                                f"AV error for {display_path} ({av_verdict})"
+                            )
+                    else:
+                        # AV not configured — move to error directory
+                        batch_logger.warning(
+                            f"AV fallback not configured for large file: {display_path}"
+                        )
+                        _move_to_error_in_watch(
+                            file_name, sub_dir, full_path, config, batch_logger
+                        )
+                        result = {
+                            "name": file_name,
+                            "path": sub_dir if sub_dir else "",
+                            "verdict": "Error",
+                            "status": "error",
+                            "tex_status": None,
+                            "av_verdict": "AV_Not_Configured",
+                        }
+
+                else:
+                    # Normal file — process via TE
+                    display_path = PathHandler.display_path(file_name, sub_dir)
+                    batch_logger.info(f"Processing: {display_path}")
+
+                    result = process_single_file(
+                        file_name, safe_file_name, sub_dir, full_path,
+                        config, url, url_tex,
+                        batch_zip_mgr,
+                    )
 
                 batch_summary["all_files"].append(result)
                 batch_summary["processed"] += 1

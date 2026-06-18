@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v11.2 (alpha)
+te_api v12.0 (alpha)
 """
 
 from te_file_handler import TE
@@ -21,10 +21,16 @@ from functools import partial
 from datetime import datetime
 import urllib3
 
-# Silence the urllib3 InsecureRequestWarning globally.
+ # Silence the urllib3 InsecureRequestWarning globally.
 # This is the standard way to suppress the "Unverified HTTPS request"
 # warning when verify=False is intentionally used with self-signed certs.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# =======================
+# Size Limits
+# =======================
+TE_FILE_SIZE_LIMIT = 104857600  # 100 MB — files >= this skip TE, go to AV
+AV_FILE_SIZE_LIMIT = 2097152000  # ~2 GB — files >= this are skipped entirely
 
 # =======================
 # Utility Functions
@@ -229,6 +235,30 @@ def main(stop_event=None, cli_args=None):
     )
     parser.add_argument("--tex-response-info-dir", help="TEX response info directory")
     parser.add_argument("--tex-clean-files-dir", help="TEX clean files directory")
+
+    # AV (Antivirus) Fallback CLI args
+    parser.add_argument(
+        "--av-enabled",
+        action="store_true",
+        help="Enable AV fallback for files too large for TE or unsupported by TE",
+    )
+    parser.add_argument(
+        "--av-username",
+        help="SSH username for AV fallback (default: from config)",
+    )
+    parser.add_argument(
+        "--av-password",
+        help="SSH password for AV fallback (default: from config)",
+    )
+    parser.add_argument(
+        "--av-remote-dir",
+        help="Remote directory for AV files on appliance (default: /var/log/apiclient)",
+    )
+    parser.add_argument(
+        "--av-rule-id",
+        type=int,
+        help="AV rule ID for policy selection (default: from config, fallback: 1)",
+    )
     args = parser.parse_args(cli_args)
 
     # =======================
@@ -247,7 +277,7 @@ def main(stop_event=None, cli_args=None):
         log_retention_days=config.log_retention_days,
     )
 
-    logger.info("TE API Scanner v11.2 - Loading configuration...")
+    logger.info("TE API Scanner v12.0 - Loading configuration...")
 
     # Display configuration summary
     config.print_summary()
@@ -308,13 +338,15 @@ def main(stop_event=None, cli_args=None):
         zip_mgr = _create_zip_manager(config)
 
         # Process any existing files immediately
-        archive_files, other_files = discover_files(config.input_directory, config)
-        if archive_files or other_files:
-            logger.info(
-                f"Processing {len(archive_files) + len(other_files)} existing files..."
-            )
+        archive_files, other_files, av_files = discover_files(
+            config.input_directory, config
+        )
+        has_files = archive_files or other_files or av_files
+        if has_files:
+            file_count = len(archive_files) + len(other_files) + len(av_files)
+            logger.info(f"Processing {file_count} existing files...")
             process_discovered_files(
-                archive_files, other_files, config, url, url_tex, zip_mgr
+                archive_files, other_files, av_files, config, url, url_tex, zip_mgr
             )
             find_and_delete_empty_subdirectories(config.input_directory)
             if zip_mgr:
@@ -345,14 +377,19 @@ def main(stop_event=None, cli_args=None):
         zip_mgr = _create_zip_manager(config)
 
         # Discover files
-        archive_files, other_files = discover_files(config.input_directory, config)
-
-        logger.info("Begin handling input files by TE")
-        logger.info(
-            f"Found {len(archive_files)} archive files and {len(other_files)} non-archive files"
+        archive_files, other_files, av_files = discover_files(
+            config.input_directory, config
         )
 
-        if len(other_files) == 0 and len(archive_files) == 0:
+        logger.info("Begin handling input files by TE")
+        file_count = len(archive_files) + len(other_files) + len(av_files)
+        logger.info(
+            f"Found {len(archive_files)} archive files, "
+            f"{len(other_files)} non-archive files, and "
+            f"{len(av_files)} files for AV fallback"
+        )
+
+        if len(other_files) == 0 and len(archive_files) == 0 and len(av_files) == 0:
             logger.info("No files to process. Exiting.")
             if zip_mgr:
                 zip_mgr.abort()
@@ -360,7 +397,7 @@ def main(stop_event=None, cli_args=None):
 
         # Process files
         process_discovered_files(
-            archive_files, other_files, config, url, url_tex, zip_mgr
+            archive_files, other_files, av_files, config, url, url_tex, zip_mgr
         )
         find_and_delete_empty_subdirectories(config.input_directory)
 
@@ -388,14 +425,19 @@ def main(stop_event=None, cli_args=None):
 
 def discover_files(input_directory, config):
     """
-    Discover files in input directory and categorize them as archives or other.
+    Discover files in input directory and categorize them as archives,
+    other, or AV fallback files.
+
+    Files >= 100 MB are routed to AV fallback. Archives are processed
+    sequentially. All other files are processed in parallel via TE API.
 
     Args:
         input_directory: Path to input directory
         config: ScannerConfig object with archive_extensions set
 
     Returns:
-        Tuple of (archive_files, other_files) as sets of (file_name, sub_dir, full_path) tuples
+        Tuple of (archive_files, other_files, av_files) as sets of
+        (file_name, safe_file_name, sub_dir, full_path) tuples
     """
     logger = logging.getLogger("te_scanner.main")
 
@@ -404,6 +446,7 @@ def discover_files(input_directory, config):
 
     archive_files = set()
     other_files = set()
+    av_files = set()
 
     # Shared collision-tracking dict across all discovered files
     seen = {}
@@ -426,16 +469,25 @@ def discover_files(input_directory, config):
             # Create a 4-tuple: (real_name, safe_name, sub_dir, full_path)
             file_info = (file, safe_file_name, sub_dir, full_path)
 
+            # Check file size for AV fallback routing
+            try:
+                file_size = os.path.getsize(full_path)
+                if file_size >= TE_FILE_SIZE_LIMIT:
+                    av_files.add(file_info)
+                    continue
+            except OSError:
+                pass
+
             if file_extension.lower() in archive_extensions:
                 archive_files.add(file_info)
             else:
                 other_files.add(file_info)
 
-    return archive_files, other_files
+    return archive_files, other_files, av_files
 
 
 def process_discovered_files(
-    archive_files, other_files, config, url, url_tex="", zip_mgr=None
+    archive_files, other_files, av_files, config, url, url_tex="", zip_mgr=None
 ):
     """
     Process discovered files using the existing processing logic.
@@ -444,10 +496,12 @@ def process_discovered_files(
     workers, then consolidated into the zip by the main process.
     Archive files are processed sequentially in the main process and added directly
     to the zip.
+    AV fallback files are processed sequentially after TE processing.
 
     Args:
-        archive_files: Set of (file_name, sub_dir, full_path) tuples
-        other_files: Set of (file_name, sub_dir, full_path) tuples
+        archive_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
+        other_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
+        av_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
         config: ScannerConfig object
         url: TE API URL
         url_tex: TEX API URL (may be empty if TEX disabled)
@@ -520,6 +574,67 @@ def process_discovered_files(
             )
             all_files.append(result)
 
+    # AV fallback files: sequential processing (SSH/SCP based)
+    if len(av_files) > 0 and config.av_fallback_enabled:
+        logger.info(f"Processing {len(av_files)} files via AV fallback")
+        try:
+            from av_handler import AVHandler
+        except ImportError as e:
+            logger.error(
+                f"AV fallback is enabled but paramiko is not installed: {e}"
+            )
+            logger.error(
+                "Install it with: pip install paramiko"
+            )
+        else:
+            with AVHandler(config) as av:
+                av_results = av.process_batch(av_files)
+                av_malicious = sum(1 for r in av_results if r.get("verdict") == "Malicious")
+                av_benign = sum(1 for r in av_results if r.get("verdict") == "Benign")
+                av_error = sum(1 for r in av_results if r.get("verdict") == "Error")
+                logger.info(
+                    f"AV fallback complete: {len(av_results)} files processed "
+                    f"({av_benign} benign, {av_malicious} malicious, {av_error} errors)"
+                )
+                all_files.extend(av_results)
+    elif len(av_files) > 0 and not config.av_fallback_enabled:
+        logger.warning(
+            f"{len(av_files)} files exceed TE size limit but AV fallback "
+            "is not configured. Moving to error directory."
+        )
+        for file_info in av_files:
+            file_name, safe_file_name, sub_dir, full_path = file_info
+            try:
+                if zip_mgr:
+                    if isinstance(zip_mgr, tuple):
+                        zip_path, zip_pwd, benign_dir, quarantine_dir, error_dir, temp_dir = zip_mgr
+                        _add_file_to_temp(safe_name=file_name, local_path=full_path,
+                                          sub_dir=sub_dir, verdict_dir=error_dir,
+                                          zip_path=zip_path, zip_pwd=zip_pwd,
+                                          temp_dir=temp_dir)
+                    else:
+                        zip_mgr.add_file(full_path, file_name, config.benign_directory.name)
+                # Move file to error directory
+                _move_file_to_error(file_name, sub_dir, full_path, config)
+                all_files.append({
+                    "name": file_name,
+                    "path": sub_dir if sub_dir else "",
+                    "verdict": "Error",
+                    "status": "error",
+                    "tex_status": None,
+                    "av_verdict": "AV_Not_Configured",
+                })
+            except Exception as e:
+                logger.error(f"Failed to handle large file {file_name}: {e}")
+                all_files.append({
+                    "name": file_name,
+                    "path": sub_dir if sub_dir else "",
+                    "verdict": "Error",
+                    "status": "error",
+                    "tex_status": None,
+                    "av_verdict": "AV_Not_Configured",
+                })
+
     # Consolidate temp directory files into the zip (multiprocessing mode)
     if zip_mgr and temp_dir:
         try:
@@ -556,6 +671,53 @@ def process_discovered_files(
             send_batch_notification(config, batch_summary)
         except Exception as e:
             logger.warning(f"Email notification failed: {e}")
+
+
+def _add_file_to_temp(safe_name, local_path, sub_dir, verdict_dir, zip_path, zip_pwd, temp_dir):
+    """Add a file to the temp directory for zip consolidation.
+
+    Args:
+        safe_name: Safe filename
+        local_path: Original file path
+        sub_dir: Subdirectory relative to input
+        verdict_dir: Verdict directory basename
+        zip_path: Path to the zip file
+        zip_pwd: Password for the zip
+        temp_dir: Temporary directory for consolidation
+    """
+    from path_handler import PathHandler
+    verdict_path = Path(temp_dir) / verdict_dir / sub_dir if sub_dir else Path(temp_dir) / verdict_dir
+    verdict_path.mkdir(parents=True, exist_ok=True)
+    dest = verdict_path / safe_name
+    try:
+        shutil.copy2(local_path, str(dest))
+    except Exception as e:
+        logger.warning(f"Failed to copy {safe_name} to temp zip: {e}")
+
+
+def _move_file_to_error(file_name, sub_dir, full_path, config):
+    """Move a file to the error directory.
+
+    Args:
+        file_name: Original filename
+        sub_dir: Subdirectory relative to input
+        full_path: Full local path to the file
+        config: ScannerConfig object
+    """
+    from path_handler import PathHandler
+    display_name = PathHandler.display_path(file_name, sub_dir)
+    error_dir = config.error_directory
+    if sub_dir:
+        error_dest = error_dir / sub_dir / file_name
+    else:
+        error_dest = error_dir / file_name
+
+    error_dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        PathHandler.safe_move(full_path, str(error_dest))
+        logger.info(f"Moved to error: {display_name}")
+    except Exception as e:
+        logger.error(f"Failed to move {display_name} to error directory: {e}")
 
 
 def find_and_delete_empty_subdirectories(input_directory):

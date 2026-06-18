@@ -90,6 +90,13 @@ class ScannerConfig:
 
     save_response_info: bool = True
 
+    # AV fallback configuration
+    av_fallback_enabled: bool = False
+    ssh_username: str = ""
+    ssh_password: str = ""
+    av_remote_directory: str = "/var/log/apiclient"
+    av_rule_id: int = 1
+
     # Logging configuration
     log_level: str = "INFO"
     log_dir: Path = field(default_factory=lambda: Path("logs"))
@@ -163,6 +170,14 @@ class ScannerConfig:
             errors.append("tex_url is required when tex_enabled is true")
         if self.tex_enabled and not self.tex_api_key:
             errors.append("tex_api_key is required when tex_enabled is true")
+
+        # Validate AV fallback settings
+        if self.av_fallback_enabled and not self.ssh_username:
+            errors.append("ssh_username is required when av_fallback_enabled is true")
+        if self.av_fallback_enabled and not self.ssh_password:
+            errors.append("ssh_password is required when av_fallback_enabled is true")
+        if self.av_rule_id < 1:
+            errors.append("av_rule_id must be at least 1")
 
         return (len(errors) == 0, errors)
 
@@ -239,6 +254,11 @@ class ScannerConfig:
             "archive_extensions": set(),
             "save_response_info": True,
             "os_images": [],
+            "av_fallback_enabled": False,
+            "ssh_username": "",
+            "ssh_password": "",
+            "av_remote_directory": "/var/log/apiclient",
+            "av_rule_id": 1,
         }
 
         # 2. Override with config file
@@ -464,6 +484,29 @@ class ScannerConfig:
                 if os_images_list:
                     config_data["os_images"] = os_images_list
 
+            # Read from AV_FALLBACK section
+            if "AV_FALLBACK" in parser:
+                section = parser["AV_FALLBACK"]
+                for key in section:
+                    if key in config_data and key not in parser.defaults():
+                        value = section[key]
+                        if key == "av_fallback_enabled":
+                            config_data[key] = value.lower() in [
+                                "true",
+                                "1",
+                                "yes",
+                                "on",
+                            ]
+                        elif key == "av_rule_id":
+                            try:
+                                config_data[key] = int(value)
+                            except ValueError:
+                                print(
+                                    f"Warning: Invalid integer value in config for {key}: {value}"
+                                )
+                        else:
+                            config_data[key] = value
+
         # 3. Override with environment variables
         for key in config_data.keys():
             env_key = env_prefix + key.upper()
@@ -510,6 +553,22 @@ class ScannerConfig:
                 else:
                     config_data[key] = value
 
+        # AV fallback env vars
+        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id"}
+        for key in _av_env_keys:
+            env_key = env_prefix + key.upper()
+            if env_key in os.environ:
+                value = os.environ[env_key]
+                if key == "av_fallback_enabled":
+                    config_data[key] = value.lower() in ["true", "1", "yes", "on"]
+                elif key == "av_rule_id":
+                    try:
+                        config_data[key] = int(value)
+                    except ValueError:
+                        print(f"Warning: Invalid integer value for {env_key}: {value}")
+                else:
+                    config_data[key] = value
+
         # 4. Override with command-line arguments (highest priority)
         if cli_args:
             # (cli_attr, config_key) mappings — applies getattr(cli_args, attr) if truthy
@@ -550,6 +609,11 @@ class ScannerConfig:
                 ("email_imap_skip_tls_verify", "email_imap_skip_tls_verify"),
                 ("email_imap_username", "email_imap_username"),
                 ("email_imap_folder", "email_imap_folder"),
+                ("av_enabled", "av_fallback_enabled"),
+                ("av_username", "ssh_username"),
+                ("av_password", "ssh_password"),
+                ("av_remote_dir", "av_remote_directory"),
+                ("av_rule_id", "av_rule_id"),
                 ("zip_archive_directory", "zip_archive_directory"),
                 ("tex_enabled", "tex_enabled"),
                 ("tex_url", "tex_url"),
@@ -731,6 +795,15 @@ class ScannerConfig:
             print(
                 f"  Scrubbed parts:        {len(self.tex_scrubbed_parts_codes)} enabled"
             )
+
+        # AV Fallback Configuration
+        print("AV Fallback:")
+        print(f"  Enabled:               {'Yes' if self.av_fallback_enabled else 'No'}")
+        if self.av_fallback_enabled:
+            print(f"  SSH Username:          {self.ssh_username}")
+            print(f"  SSH Password:          {'Set' if self.ssh_password else '(empty)'}")
+            print(f"  Remote Directory:      {self.av_remote_directory}")
+            print(f"  AV Rule ID:            {self.av_rule_id}")
 
         # Show path type warnings
         for name, path in [

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-safe_filename.py v11.2 (alpha)
+safe_filename.py v12.0 (alpha)
 Utilities for generating ASCII-only pseudonyms from filenames.
 
 The TE API server only accepts filenames composed of ASCII characters.
@@ -21,6 +21,7 @@ the caller.
 """
 
 import hashlib
+import re
 
 
 def sanitize_filename(filename: str, seen: dict) -> str:
@@ -97,3 +98,40 @@ def sanitize_filename(filename: str, seen: dict) -> str:
         seen[candidate] = filename
 
     return candidate
+
+
+def sanitize_for_remote(filename: str) -> str:
+    """Return a filename safe for the AV appliance remote path.
+
+    Only allows: ASCII letters (a-z, A-Z), digits (0-9), hyphens (-),
+    underscores (_), and the original file extension.
+    All other characters are replaced with underscores.
+
+    This is stricter than sanitize_filename() because the remote
+    appliance command line requires it.
+
+    Args:
+        filename: The original filename.
+
+    Returns:
+        A safe filename for remote AV analysis.
+    """
+    last_dot = filename.rfind(".")
+    if last_dot > 0:
+        base = filename[:last_dot]
+        ext = filename[last_dot:]
+    else:
+        base = filename
+        ext = ""
+
+    # Replace any character that's NOT alphanumeric, hyphen, or underscore
+    safe_base = re.sub(r'[^a-zA-Z0-9_-]', '_', base)
+
+    # Collapse multiple consecutive underscores and strip leading/trailing
+    safe_base = re.sub(r'_+', '_', safe_base).strip('_')
+
+    if not safe_base:
+        # If everything was stripped, use a SHA256 hash as fallback
+        safe_base = hashlib.sha256(filename.encode("utf-8")).hexdigest()[:16]
+
+    return f"{safe_base}{ext}"
