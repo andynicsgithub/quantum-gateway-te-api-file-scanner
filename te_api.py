@@ -26,6 +26,10 @@ import urllib3
 # warning when verify=False is intentionally used with self-signed certs.
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# Module-level logger for use by helper functions that can't access
+# the local 'logger' variable inside process_discovered_files()
+logger = logging.getLogger("te_scanner.main")
+
 # =======================
 # Size Limits
 # =======================
