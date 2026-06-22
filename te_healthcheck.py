@@ -294,7 +294,7 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
             f"-force_path_av -r={config.av_rule_id if config.av_rule_id >= 1 else 1} "
             f"-f={remote_path}"
         )
-        logger.info(f"AV health check: Running command: {command}")
+        logger.debug(f"AV health check: Running command: {command}")
 
         stdin, stdout, stderr = ssh_client.exec_command(
             command, timeout=HEALTHCHECK_TIMEOUT
@@ -304,14 +304,14 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
         stderr_text = stderr.read().decode("utf-8", errors="replace")
         exit_code = stdout.channel.recv_exit_status()
 
-        logger.info(f"AV health check: exit_code={exit_code}")
-        logger.info(f"AV health check: output length={len(output)}, stderr length={len(stderr_text)}")
-        logger.info(f"AV health check: output='{output.strip()[:500]}'")
-        if stderr_text.strip():
-            logger.info(f"AV health check: stderr='{stderr_text.strip()[:500]}'")
+        logger.debug(f"AV health check: exit_code={exit_code}")
+        if output:
+            logger.debug(f"AV health check output: {output.strip()[:500]}")
+        if stderr_text:
+            logger.debug(f"AV health check stderr: {stderr_text.strip()[:500]}")
 
         # Parse verdict
-        verdict = _parse_av_verdict(output, exit_code, stderr_text)
+        verdict = _parse_av_verdict(output, exit_code)
 
         if verdict == "Malicious":
             logger.info("AV health check passed: Malicious verdict (drop)")
@@ -393,58 +393,39 @@ def _sanitize_for_av_health(filename: str) -> str:
     return f"{safe_base}{ext}"
 
 
-def _parse_av_verdict(output: str, exit_code: int, stderr_text: str = "") -> str:
+def _parse_av_verdict(output: str, exit_code: int) -> str:
     """Parse the AV command output to extract the verdict.
 
     Args:
         output: stdout from the temain command
         exit_code: exit code from the command
-        stderr_text: stderr from the temain command
 
     Returns:
         Verdict string: 'Malicious', 'Benign', or 'Error'
     """
-    # Combine output and stderr for parsing
-    combined = f"{output}\n{stderr_text}"
-
     if exit_code != 0:
         return "Error"
 
-    if not combined or not combined.strip():
+    if not output or not output.strip():
         return "Error"
 
-    # Try to find verdict in output first, then stderr
-    for source in [output, stderr_text]:
-        if not source or not source.strip():
-            continue
-
-        source_lower = source.lower()
-
-        # Parse :action from S-expression (with flexible spacing)
-        action_match = re.search(r":action\s*\(\s*(\w+)\s*\)", source)
-        if action_match:
-            action = action_match.group(1).lower()
-            if action == "drop":
-                return "Malicious"
-            elif action == "accept":
-                return "Benign"
-            else:
-                logger.warning(f"AV verdict: unrecognized action: {action}")
-
-        # Check for verdict keywords
-        if "malicious" in source_lower or "drop" in source_lower:
+    # Parse :action from S-expression
+    action_match = re.search(r":action\s*\(\s*(\w+)\s*\)", output)
+    if action_match:
+        action = action_match.group(1).lower()
+        if action == "drop":
             return "Malicious"
-        elif "benign" in source_lower or "accept" in source_lower:
+        elif action == "accept":
             return "Benign"
+        else:
+            return "Error"
 
-        # Check for action in parentheses
-        action_match = re.search(r"\(\s*(drop|accept)\s*\)", source)
-        if action_match:
-            action = action_match.group(1).lower()
-            if action == "drop":
-                return "Malicious"
-            elif action == "accept":
-                return "Benign"
+    # Fallback: check text output
+    output_lower = output.lower()
+    if "malicious" in output_lower:
+        return "Malicious"
+    elif "benign" in output_lower:
+        return "Benign"
 
     return "Error"
 
