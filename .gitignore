@@ -28,6 +28,9 @@ test_reports/
 logs/
 *.log
 
+# Plan directories (working documents)
+plans/
+
 # IDE and editor files
 .idea/
 .vscode/
