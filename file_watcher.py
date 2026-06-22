@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v12.0 (alpha)
+file_watcher.py v13.0 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)
@@ -319,7 +319,7 @@ class WatcherThread:
         return self.watcher.get_pending_count()
 
 
-def start_watching(config, url, url_tex="", stop_event=None):
+def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
     """
     Start file watching (blocking call).
 
@@ -327,8 +327,32 @@ def start_watching(config, url, url_tex="", stop_event=None):
         config: ScannerConfig object
         url: TE API URL
         url_tex: TEX API URL (may be empty if TEX disabled)
+        api_healthy: Initial API health status (from startup health check)
     """
     logger = logging.getLogger("te_scanner.watcher")
+
+    # Health check state
+    healthcheck_dir = Path(config.healthcheck_directory)
+
+    # Run startup health check if needed
+    if healthcheck_dir and healthcheck_dir.exists() and api_healthy:
+        try:
+            import te_healthcheck
+            te_result = te_healthcheck.check_te_health(config, healthcheck_dir)
+            if config.av_fallback_enabled:
+                av_result = te_healthcheck.check_av_health(config, healthcheck_dir)
+            else:
+                av_result = {"av": "SKIPPED", "healthy": True}
+            api_healthy = te_result["healthy"] and av_result["healthy"]
+            if api_healthy:
+                logger.info("Startup health check passed")
+            else:
+                logger.error(f"Startup health check failed: {te_result.get('message', 'TE API')}")
+                if av_result["healthy"] is not True:
+                    logger.error(f"AV health check failed: {av_result.get('message', '')}")
+        except Exception as e:
+            logger.error(f"Startup health check error: {e}")
+            api_healthy = False
 
     # Define batch processing callback
     def process_batch_callback(file_paths):
@@ -544,6 +568,9 @@ def start_watching(config, url, url_tex="", stop_event=None):
         last_dispatch_time = 0.0
         check_interval = 2
 
+        last_batch_time = time.time()
+        idle_check_interval = 300  # 5 minutes in seconds
+
         while True:
             if stop_event:
                 stop_event.wait(check_interval)
@@ -552,34 +579,102 @@ def start_watching(config, url, url_tex="", stop_event=None):
             else:
                 time.sleep(check_interval)
 
-            now = time.time()
-            watcher_thread.watcher._check_batch_ready()
+            if api_healthy:
+                # Normal operation — process batch and check idle timeout
+                now = time.time()
+                watcher_thread.watcher._check_batch_ready()
+                last_batch_time = time.time()
 
-            # Periodically check if today's log file needs rotation
-            if now - last_dispatch_time >= check_interval:
-                last_dispatch_time = now
-                from logger_config import (
-                    _swap_file_handler,
-                    rotate_today_log,
-                    _get_today_log_name,
-                )
+                # Periodically check if today's log file needs rotation
+                if now - last_dispatch_time >= check_interval:
+                    last_dispatch_time = now
+                    from logger_config import (
+                        _swap_file_handler,
+                        rotate_today_log,
+                        _get_today_log_name,
+                    )
 
-                today_name = _get_today_log_name(config.log_dir)
-                if today_name:
-                    today_path = config.log_dir / today_name
-                    if today_path.exists():
+                    today_name = _get_today_log_name(config.log_dir)
+                    if today_name:
+                        today_path = config.log_dir / today_name
                         if (
-                            today_path.stat().st_size
+                            today_path.exists()
+                            and today_path.stat().st_size
                             >= config.max_log_size_mb * 1024 * 1024
                         ):
                             rotate_today_log(config.log_dir)
                             _swap_file_handler(config.log_dir)
 
-            pending = watcher_thread.get_pending_count()
-            if pending > 0:
-                logger.info(
-                    f"[WATCHER] {pending} files pending (waiting for copy completion)..."
-                )
+                # Idle health check (every 5 min, only when pending queue is empty)
+                pending = watcher_thread.get_pending_count()
+                if pending > 0:
+                    logger.info(
+                        f"[WATCHER] {pending} files pending (waiting for copy completion)..."
+                    )
+
+                # Check idle timeout
+                idle_time = time.time() - last_batch_time
+                if idle_time >= idle_check_interval:
+                    last_batch_time = time.time()
+                    if pending == 0:
+                        try:
+                            import te_healthcheck
+                            te_result = te_healthcheck.check_te_health(
+                                config, healthcheck_dir
+                            )
+                            if config.av_fallback_enabled:
+                                av_result = te_healthcheck.check_av_health(
+                                    config, healthcheck_dir
+                                )
+                            else:
+                                av_result = {"av": "SKIPPED", "healthy": True}
+                            if not te_result["healthy"] or not av_result["healthy"]:
+                                logger.warning(
+                                    f"Idle health check failed: "
+                                    f"TE={te_result.get('te')}, "
+                                    f"AV={av_result.get('av')}"
+                                )
+                                try:
+                                    te_healthcheck.send_healthcheck_notification(
+                                        config, te_result
+                                    )
+                                except Exception:
+                                    pass
+                                api_healthy = False
+                                logger.warning(
+                                    "Entering polling mode — waiting for API recovery"
+                                )
+                        except Exception as e:
+                            logger.error(f"Idle health check error: {e}")
+
+            else:
+                # Polling mode — retry health check every 30 seconds
+                time.sleep(check_interval)
+                try:
+                    import te_healthcheck
+                    te_result = te_healthcheck.check_te_health(config, healthcheck_dir)
+                    if config.av_fallback_enabled:
+                        av_result = te_healthcheck.check_av_health(
+                            config, healthcheck_dir
+                        )
+                    else:
+                        av_result = {"av": "SKIPPED", "healthy": True}
+                    if te_result["healthy"] and av_result["healthy"]:
+                        api_healthy = True
+                        logger.info("API recovered — resuming file processing")
+                        try:
+                            te_healthcheck.send_healthcheck_notification(
+                                config, te_result, is_recovery=True
+                            )
+                        except Exception:
+                            pass
+                    else:
+                        logger.debug(
+                            f"Health check retry failed: "
+                            f"TE={te_result.get('te')}, AV={av_result.get('av')}"
+                        )
+                except Exception as e:
+                    logger.error(f"Health check retry failed: {e}")
 
     except KeyboardInterrupt:
         logger.info("Shutdown requested...")

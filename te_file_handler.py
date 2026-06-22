@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_file_handler v12.0 (alpha)
+te_file_handler v13.0 (alpha)
 """
 
 import json

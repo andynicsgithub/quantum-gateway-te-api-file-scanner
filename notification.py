@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-notification.py v11.2 (alpha)
+notification.py v13.0 (alpha)
 Email notification system for TE API Scanner.
 Sends batch completion notifications via SMTP with configurable templates
 and optional IMAP "Sent" folder saving.

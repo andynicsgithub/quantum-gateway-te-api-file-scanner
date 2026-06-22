@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v12.0 (alpha)
+te_api v13.0 (alpha)
 """
 
 from te_file_handler import TE
@@ -20,6 +20,7 @@ from pathlib import Path
 from functools import partial
 from datetime import datetime
 import urllib3
+import te_healthcheck
 
  # Silence the urllib3 InsecureRequestWarning globally.
 # This is the standard way to suppress the "Unverified HTTPS request"
@@ -263,6 +264,10 @@ def main(stop_event=None, cli_args=None):
         type=int,
         help="AV rule ID for policy selection (default: from config, fallback: 1)",
     )
+    parser.add_argument(
+        "--healthcheck-dir",
+        help="Health check test files directory (default: from config, healthcheck/)",
+    )
     args = parser.parse_args(cli_args)
 
     # =======================
@@ -303,13 +308,60 @@ def main(stop_event=None, cli_args=None):
 
     url_tex = config.tex_url
 
-    # Warn about Windows long path support if applicable
+   # Warn about Windows long path support if applicable
     if PathHandler.is_windows() and not PathHandler.supports_long_paths():
         logger.warning("Windows long path support is not enabled.")
         logger.warning("         Paths over 260 characters may fail.")
         logger.warning(
-            "         See: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation"
+            "         See: https://learn.microsoft.com/en-us/windows/32/fileio/maximum-file-path-limitation"
         )
+
+    # =======================
+    # Health Check
+    # =======================
+
+    healthcheck_dir = Path(config.healthcheck_directory)
+    te_health_result = None
+    av_health_result = None
+    api_healthy = True
+
+    if healthcheck_dir and healthcheck_dir.exists():
+        logger.info("Running health check...")
+        try:
+            te_health_result = te_healthcheck.check_te_health(config, healthcheck_dir)
+            if not te_health_result["healthy"]:
+                logger.error(f"Health check failed: {te_health_result.get('message', 'TE API')}")
+                api_healthy = False
+
+            if config.av_fallback_enabled:
+                av_health_result = te_healthcheck.check_av_health(config, healthcheck_dir)
+                if not av_health_result["healthy"]:
+                    logger.error(f"AV health check failed: {av_health_result.get('message', '')}")
+                    api_healthy = False
+
+            if api_healthy:
+                logger.info("Health check passed")
+            else:
+                logger.warning("Health check failed — will send notification and proceed based on mode")
+
+        except Exception as e:
+            logger.error(f"Health check error: {e}")
+            api_healthy = False
+            te_health_result = {
+                "te": f"FAIL: {e}",
+                "healthy": False,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "message": str(e),
+            }
+    else:
+        logger.info("Health check skipped — healthcheck directory not found: %s", healthcheck_dir)
+
+    # Send failure notification if health check failed
+    if not api_healthy and te_health_result:
+        try:
+            te_healthcheck.send_healthcheck_notification(config, te_health_result)
+        except Exception as e:
+            logger.warning(f"Failed to send health check notification: {e}")
 
     # =======================
     # Watch Mode vs One-Shot Mode
@@ -338,33 +390,38 @@ def main(stop_event=None, cli_args=None):
         logger.info("Starting in WATCH mode")
         logger.info("Dependencies check passed.")
 
+        if not api_healthy:
+            logger.warning("Health check failed — entering polling mode (files will not be processed)")
+            logger.warning("Waiting for API to recover...")
+
         # Prepare zip archive if password is configured
         zip_mgr = _create_zip_manager(config)
 
-        # Process any existing files immediately
-        archive_files, other_files, av_files = discover_files(
-            config.input_directory, config
-        )
-        has_files = archive_files or other_files or av_files
-        if has_files:
-            file_count = len(archive_files) + len(other_files) + len(av_files)
-            logger.info(f"Processing {file_count} existing files...")
-            process_discovered_files(
-                archive_files, other_files, av_files, config, url, url_tex, zip_mgr
+        # Process any existing files immediately (only if API is healthy)
+        if api_healthy:
+            archive_files, other_files, av_files = discover_files(
+                config.input_directory, config
             )
-            find_and_delete_empty_subdirectories(config.input_directory)
-            if zip_mgr:
-                zip_mgr.close()
-        else:
-            logger.info("No existing files to process.")
-            if zip_mgr:
-                zip_mgr.abort()
+            has_files = archive_files or other_files or av_files
+            if has_files:
+                file_count = len(archive_files) + len(other_files) + len(av_files)
+                logger.info(f"Processing {file_count} existing files...")
+                process_discovered_files(
+                    archive_files, other_files, av_files, config, url, url_tex, zip_mgr
+                )
+                find_and_delete_empty_subdirectories(config.input_directory)
+                if zip_mgr:
+                    zip_mgr.close()
+            else:
+                logger.info("No existing files to process.")
+                if zip_mgr:
+                    zip_mgr.abort()
 
         # Start watching (blocking call)
         from file_watcher import start_watching
 
         try:
-            start_watching(config, url, url_tex, stop_event=stop_event)
+            start_watching(config, url, url_tex, api_healthy=api_healthy, stop_event=stop_event)
         except Exception as e:
             logger.error(f"ERROR starting watcher: {e}")
             import traceback
@@ -374,6 +431,20 @@ def main(stop_event=None, cli_args=None):
 
     else:
         # One-shot mode: process and exit
+        if not api_healthy:
+            logger.error("ERROR: Health check failed. API is not responding correctly.")
+            print("\n" + "=" * 60)
+            print("  ERROR: Health check failed")
+            print("=" * 60)
+            if te_health_result:
+                print(f"  TE: {te_health_result.get('te', 'UNKNOWN')}")
+            if av_health_result:
+                print(f"  AV: {av_health_result.get('av', 'N/A')}")
+            if te_health_result:
+                print(f"  Details: {te_health_result.get('message', 'N/A')}")
+            print("=" * 60)
+            return 1
+
         logger.info("Starting in ONE-SHOT mode")
         logger.info(f"Parallel processing of {config.concurrency} files at once")
 

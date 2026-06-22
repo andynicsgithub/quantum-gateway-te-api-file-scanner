@@ -1,4 +1,4 @@
-# This is config.ini.default v12.0 (alpha)
+  # This is config.ini.default v13.0 (alpha)
 [DEFAULT]
 #Directories - where the files are starting from and which directories they should be moved to when benign or malicious or causing an error etc.
 input_directory = /path/to/source/files
@@ -191,7 +191,7 @@ xml = true
 
 [AV_FALLBACK]
 # Antivirus fallback for files too large for TE (>= 100MB) or unsupported by TE.
-# Uses SCP to transfer files and SSH to trigger analysis on the appliance.
+# Uses SFTP to transfer files and SSH to trigger analysis on the appliance.
 # IMPORTANT: ssh_password is stored in plaintext. Use environment variables
 # (TE_SSH_PASSWORD) for sensitive deployments.
 
@@ -199,9 +199,17 @@ av_fallback_enabled = false
 ssh_username = apiclient
 ssh_password =
 av_remote_directory = /var/log/apiclient
-av_rule_id = 1
+ av_rule_id = 1
 
-[LOGGING]
+ [HEALTHCHECK]
+ # Health check test files directory (relative to app directory).
+ # Contains eicar.com (TE test) and eicar.com.zip (AV test).
+ # The tool uploads eicar.com to the TE API to verify end-to-end functionality.
+ # If AV fallback is enabled, eicar.com.zip is transferred via SFTP and analyzed.
+ # A correct health check requires the EICAR test file to return "Malicious".
+ directory = healthcheck
+
+ [LOGGING]
 log_level = INFO
 log_dir = ./logs
 max_log_size_mb = 10

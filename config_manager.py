@@ -97,6 +97,9 @@ class ScannerConfig:
     av_remote_directory: str = "/var/log/apiclient"
     av_rule_id: int = 1
 
+    # Health check configuration
+    healthcheck_directory: Path = field(default_factory=lambda: Path("healthcheck"))
+
     # Logging configuration
     log_level: str = "INFO"
     log_dir: Path = field(default_factory=lambda: Path("logs"))
@@ -259,6 +262,7 @@ class ScannerConfig:
             "ssh_password": "",
             "av_remote_directory": "/var/log/apiclient",
             "av_rule_id": 1,
+            "healthcheck_directory": "healthcheck",
         }
 
         # 2. Override with config file
@@ -507,6 +511,13 @@ class ScannerConfig:
                         else:
                             config_data[key] = value
 
+            # Read from HEALTHCHECK section
+            if "HEALTHCHECK" in parser:
+                section = parser["HEALTHCHECK"]
+                for key in section:
+                    if key in config_data and key not in parser.defaults():
+                        config_data[key] = section[key]
+
         # 3. Override with environment variables
         for key in config_data.keys():
             env_key = env_prefix + key.upper()
@@ -569,6 +580,13 @@ class ScannerConfig:
                 else:
                     config_data[key] = value
 
+        # Health check env vars
+        _hc_env_keys = {"healthcheck_directory"}
+        for key in _hc_env_keys:
+            env_key = env_prefix + key.upper()
+            if env_key in os.environ:
+                config_data[key] = os.environ[env_key]
+
         # 4. Override with command-line arguments (highest priority)
         if cli_args:
             # (cli_attr, config_key) mappings — applies getattr(cli_args, attr) if truthy
@@ -619,6 +637,7 @@ class ScannerConfig:
                 ("tex_url", "tex_url"),
                 ("tex_response_info_dir", "tex_response_info_directory"),
                 ("tex_clean_files_dir", "tex_clean_files_directory"),
+                ("healthcheck_dir", "healthcheck_directory"),
             ]
             _int_cli_keys = {
                 "concurrency",
@@ -804,6 +823,10 @@ class ScannerConfig:
             print(f"  SSH Password:          {'Set' if self.ssh_password else '(empty)'}")
             print(f"  Remote Directory:      {self.av_remote_directory}")
             print(f"  AV Rule ID:            {self.av_rule_id}")
+
+        # Health Check Configuration
+        print("Health Check:")
+        print(f"  Directory:             {self.healthcheck_directory}")
 
         # Show path type warnings
         for name, path in [

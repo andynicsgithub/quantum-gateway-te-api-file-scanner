@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-av_handler.py v12.0 (alpha)
+av_handler.py v13.0 (alpha)
 Antivirus (AV) fallback handler for files too large for TE or unsupported by TE.
 
 Uses SCP (via SFTP) to transfer files to the TE appliance and SSH to trigger
