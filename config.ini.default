@@ -66,12 +66,14 @@ email_malicious_only = false
 
 # SMTP settings
 email_smtp_server =
-email_smtp_port = 587
-email_tls_method = starttls
 # none | starttls | smtp_ssl
 # none: no encryption (local/internal mail servers only)
 # starttls: upgrade connection with STARTTLS after connect (port 587)
 # smtp_ssl: implicit SSL from connection start (port 465)
+email_tls_method = starttls
+# Must set the port number in all cases. Set to default port as listed in the comments just above, or set to a custom port to override the default for the chosen protocol.
+email_smtp_port = 587
+
 email_skip_tls_verify = false
 email_username = 
 email_password = 
