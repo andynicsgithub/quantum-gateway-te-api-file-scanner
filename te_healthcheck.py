@@ -14,6 +14,7 @@ import os
 import re
 import time
 import logging
+import warnings
 import hashlib
 import requests
 from pathlib import Path
@@ -252,6 +253,13 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message": error_msg,
         }
+
+    # Suppress paramiko's deprecated TripleDES warning (from cryptography lib)
+    warnings.filterwarnings(
+        "ignore",
+        message=".*TripleDES.*",
+        category=DeprecationWarning,
+    )
 
     # Import paramiko
     try:
