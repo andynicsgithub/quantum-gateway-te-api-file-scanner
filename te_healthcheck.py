@@ -114,7 +114,7 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
             upload_status = "UNKNOWN"
         logger.info(f"Health check: Upload status = {upload_status}")
 
-        if upload_status != "upload_success":
+        if upload_status not in ("upload_success", "FOUND"):
             error_msg = f"Upload returned unexpected status: {upload_status}"
             logger.error(f"Health check failed: {error_msg}")
             return {
@@ -123,6 +123,9 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                 "message": error_msg,
             }
+
+        if upload_status == "FOUND":
+            logger.info("Health check: Test file already in TE cache — querying for cached result")
 
     except Exception as e:
         error_msg = f"Upload failed: {e}"
@@ -238,7 +241,7 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     if healthcheck_dir is None:
         healthcheck_dir = Path("healthcheck")
 
-    test_file = healthcheck_dir / "eicar.com.zip"
+    test_file = healthcheck_dir / "eicar.com"
 
     if not test_file.exists():
         error_msg = f"AV health check test file not found: {test_file}"
