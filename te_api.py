@@ -671,6 +671,41 @@ def process_discovered_files(
                     f"AV fallback complete: {len(av_results)} files processed "
                     f"({av_benign} benign, {av_malicious} malicious, {av_error} errors)"
                 )
+
+                # Move local AV files to verdict directories
+                for result in av_results:
+                    file_name = result.get("name", "unknown")
+                    sub_dir = result.get("path", "")
+                    verdict = result.get("verdict", "Error")
+                    full_path = None
+                    # Find the full path from av_files
+                    for file_info in av_files:
+                        if file_info[0] == file_name:
+                            full_path = file_info[3]
+                            break
+
+                    if not full_path:
+                        logger.error(f"AV: could not find file path for {file_name}")
+                        continue
+
+                    # Determine destination based on verdict
+                    if verdict == "Malicious":
+                        dest = config.quarantine_directory / sub_dir / file_name
+                        action = "quarantine"
+                    elif verdict == "Benign":
+                        dest = config.benign_directory / sub_dir / file_name
+                        action = "benign"
+                    else:
+                        dest = config.error_directory / sub_dir / file_name
+                        action = "error"
+
+                    dest.parent.mkdir(parents=True, exist_ok=True)
+                    try:
+                        PathHandler.safe_move(Path(full_path), dest)
+                        logger.info(f"AV {action}: moved {file_name} to {action} directory")
+                    except Exception as e:
+                        logger.error(f"AV: failed to move {file_name} to {action}: {e}")
+
                 all_files.extend(av_results)
     elif len(av_files) > 0 and not config.av_fallback_enabled:
         logger.warning(

@@ -682,6 +682,14 @@ class TE(object):
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.error_directory)
+        elif verdict == "Unknown":
+            # Unknown verdict but status is not FOUND — still move to error
+            basename = self.error_directory.name
+            self.logger.warning(
+                f"{self.log_path} - Unknown verdict, moving to error directory"
+            )
+            self._add_to_zip(basename)
+            self.move_file(self.error_directory)
 
     def _add_to_zip(self, verdict_basename=None):
         """
