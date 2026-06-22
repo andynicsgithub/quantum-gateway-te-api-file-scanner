@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-safe_filename.py v12.0 (alpha)
+safe_filename.py v13.0 (alpha)
 Utilities for generating ASCII-only pseudonyms from filenames.
 
 The TE API server only accepts filenames composed of ASCII characters.

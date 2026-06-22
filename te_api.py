@@ -286,7 +286,7 @@ def main(stop_event=None, cli_args=None):
         log_retention_days=config.log_retention_days,
     )
 
-    logger.info("TE API Scanner v12.0 - Loading configuration...")
+    logger.info("TE API Scanner v13.0 - Loading configuration...")
 
     # Display configuration summary
     config.print_summary()
