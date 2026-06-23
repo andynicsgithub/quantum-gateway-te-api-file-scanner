@@ -115,7 +115,7 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
             upload_status = "UNKNOWN"
         logger.info(f"Health check: Upload status = {upload_status}")
 
-        if upload_status not in ("upload_success", "FOUND"):
+        if upload_status.upper() not in ("UPLOAD_SUCCESS", "FOUND"):
             error_msg = f"Upload returned unexpected status: {upload_status}"
             logger.error(f"Health check failed: {error_msg}")
             return {
