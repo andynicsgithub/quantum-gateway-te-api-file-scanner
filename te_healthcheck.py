@@ -242,7 +242,7 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     if healthcheck_dir is None:
         healthcheck_dir = Path("healthcheck")
 
-    test_file = healthcheck_dir / "eicar.com"
+    test_file = healthcheck_dir / "eicar.com.zip"
 
     if not test_file.exists():
         error_msg = f"AV health check test file not found: {test_file}"
