@@ -648,7 +648,7 @@ class TE(object):
             )
             self._add_to_zip(basename)
             self.move_file(self.error_directory)
-        elif self.final_status_label == "FOUND":
+        elif self.final_status_label in ("FOUND", "PARTIALLY_FOUND"):
             self.logger.debug("{} - move_file called".format(self.log_path))
             self.logger.debug(
                 f"{self.log_path} - [ZIP] verdict={verdict}"
@@ -675,19 +675,82 @@ class TE(object):
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
-            elif verdict == "Unknown":
-                basename = self.error_directory.name
-                self.logger.warning(
-                    f"{self.log_path} - Unknown verdict, moving to error directory"
-                )
-                self._add_to_zip(basename)
-                self.move_file(self.error_directory)
         elif verdict == "Unknown":
-            # Unknown verdict but status is not FOUND — still move to error
-            basename = self.error_directory.name
-            self.logger.warning(
-                f"{self.log_path} - Unknown verdict, moving to error directory"
+            # Unknown verdict — this means TE status is still PENDING when
+            # we reached the move logic. TEX processing is only for file
+            # sanitization and must NOT influence verdict routing.
+            # Keep polling TE until we get a real verdict (or timeout).
+            self.logger.info(
+                f"{self.log_path} - No TE verdict yet (status={self.final_status_label}), "
+                f"continuing to poll for TE results..."
             )
+            query_wait = 0
+            max_wait = self.max_retries * self.seconds_to_wait
+            while query_wait < max_wait:
+                time.sleep(self.seconds_to_wait)
+                query_wait += self.seconds_to_wait
+                request = copy.deepcopy(self.request_template)
+                request["request"][0]["sha1"] = self.sha1
+                data = json.dumps(request)
+                self.logger.info(
+                    f"{self.log_path} - Polling TE verdict after {query_wait}s..."
+                )
+                response = requests.post(
+                    url=self.url + "query",
+                    data=data,
+                    verify=not self.skip_tls_verify,
+                    timeout=30,
+                )
+                response_j = response.json()
+                try:
+                    new_status = response_j["response"][0]["status"]["label"]
+                    self.logger.debug(
+                        f"{self.log_path} - Poll status: {new_status}"
+                    )
+                    if new_status in ("FOUND", "NOT_FOUND", "PARTIALLY_FOUND", "UPLOAD_SUCCESS"):
+                        self.final_status_label = new_status
+                        self.final_response = response_j
+                        verdict = self.parse_verdict(response_j, "te")
+                        if verdict == "Malicious":
+                            basename = self.quarantine_directory.name
+                            self.logger.debug(
+                                f"{self.log_path} - [ZIP] Malicious: basename={basename!r}"
+                            )
+                            self._add_to_zip(basename)
+                            self.move_file(self.quarantine_directory)
+                            self.parse_report_id(response_j)
+                            if self.report_id != "":
+                                self.download_report()
+                        elif verdict == "Benign":
+                            basename = self.benign_directory.name
+                            self.logger.debug(
+                                f"{self.log_path} - [ZIP] Benign: basename={basename!r}"
+                            )
+                            self._add_to_zip(basename)
+                            self.move_file(self.benign_directory)
+                        elif verdict == "Unknown":
+                            # Even final status has no verdict — error
+                            basename = self.error_directory.name
+                            self.logger.warning(
+                                f"{self.log_path} - Final status={new_status} but no verdict, moving to error"
+                            )
+                            self._add_to_zip(basename)
+                            self.move_file(self.error_directory)
+                        else:
+                            basename = self.error_directory.name
+                            self._add_to_zip(basename)
+                            self.move_file(self.error_directory)
+                        return
+                except (KeyError, IndexError) as e:
+                    self.logger.warning(
+                        f"{self.log_path} - Unexpected poll response: {e}"
+                    )
+            # Timed out waiting for TE
+            self.logger.warning(
+                f"{self.log_path} - Timed out waiting for TE verdict after "
+                f"{query_wait}s, moving to error directory."
+            )
+            basename = self.error_directory.name
             self._add_to_zip(basename)
             self.move_file(self.error_directory)
 
