@@ -59,6 +59,8 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         self.pending_files = {}  # path -> {created, last_modified, closed, size}
         self._lock = threading.Lock()
         self.last_activity = 0.0
+        self._batch_dispatched = False  # Set before batch callback, cleared after
+        self._batch_processing = False  # True while batch callback is running
         self.batch_delay = config.watch_batch_delay
         self.max_batch = config.watch_max_batch
 
@@ -229,6 +231,8 @@ class CopyCompletionWatcher(FileSystemEventHandler):
             f"[WATCHER] Triggering batch processing: {len(file_paths)} files"
         )
 
+        self._batch_dispatched = True
+        self._batch_processing = True
         try:
             self.batch_callback(file_paths)
         except Exception as e:
@@ -242,6 +246,8 @@ class CopyCompletionWatcher(FileSystemEventHandler):
                             "closed": True,
                             "size": os.path.getsize(path),
                         }
+        finally:
+            self._batch_processing = False
 
     def get_pending_count(self):
         """Return number of files currently pending."""
@@ -600,8 +606,17 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
             if api_healthy:
                 # Normal operation — process batch and check idle timeout
                 now = time.time()
+
                 watcher_thread.watcher._check_batch_ready()
-                last_batch_time = time.time()
+
+                # If a batch was dispatched and all pending files are gone,
+                # processing has finished. Reset the idle timer so the
+                # health check fires idle_check_interval seconds after the
+                # batch completes.
+                if watcher_thread.watcher._batch_dispatched:
+                    watcher_thread.watcher._batch_dispatched = False
+                    if watcher_thread.watcher.get_pending_count() == 0:
+                        last_batch_time = time.time()
 
                 # Periodically check if today's log file needs rotation
                 if now - last_dispatch_time >= check_interval:
@@ -658,11 +673,11 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                         f"[WATCHER] {pending} files pending (waiting for copy completion)..."
                     )
 
-                # Check idle timeout
+                # Check idle timeout — skip if a batch is actively processing
                 idle_time = time.time() - last_batch_time
                 if idle_time >= idle_check_interval:
                     last_batch_time = time.time()
-                    if pending == 0:
+                    if pending == 0 and not watcher_thread.watcher._batch_processing:
                         try:
                             import te_healthcheck
                             te_result = te_healthcheck.check_te_health(
