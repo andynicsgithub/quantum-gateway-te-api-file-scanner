@@ -107,6 +107,16 @@ class ScannerConfig:
     max_log_size_mb: int = 10
     log_retention_days: int = 90
 
+    def __post_init__(self):
+        """Ensure integer fields loaded from config/env are actually ints."""
+        for attr in ("av_te_threshold_mb", "av_rule_id"):
+            current = getattr(self, attr)
+            if not isinstance(current, int):
+                try:
+                    object.__setattr__(self, attr, int(current))
+                except (ValueError, TypeError):
+                    pass
+
     def validate(self) -> Tuple[bool, List[str]]:
         """
         Validate configuration settings.
@@ -574,7 +584,7 @@ class ScannerConfig:
                 value = os.environ[env_key]
                 if key == "av_fallback_enabled":
                     config_data[key] = value.lower() in ["true", "1", "yes", "on"]
-                elif key == "av_rule_id":
+                elif key == "av_rule_id" or key == "av_te_threshold_mb":
                     try:
                         config_data[key] = int(value)
                     except ValueError:
@@ -650,6 +660,8 @@ class ScannerConfig:
                 "watch_max_batch",
                 "email_smtp_port",
                 "email_imap_port",
+                "av_rule_id",
+                "av_te_threshold_mb",
             }
             for cli_attr, config_key in _cli_mappings:
                 val = getattr(cli_args, cli_attr, None)
