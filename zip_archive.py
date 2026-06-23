@@ -12,6 +12,7 @@ In single-process mode (watch mode), files are added directly to the zip.
 
 import pyzipper
 import logging
+import threading
 from pathlib import Path
 from path_handler import PathHandler
 
@@ -38,6 +39,7 @@ class ZipArchiveManager:
         self.zip_path = self.archive_dir / f"{timestamp}.zip"
         self.logger = logging.getLogger("te_scanner.zip_archive")
         self._zip_file = None
+        self._zip_lock = threading.Lock()
 
     def _open(self):
         """Open the zip file for writing."""
@@ -86,30 +88,31 @@ class ZipArchiveManager:
             sub_dir: Subdirectory relative to input (empty string if at root)
             file_name: Name of the file
         """
-        if self._zip_file is None:
-            return
-
-        display_path = PathHandler.display_path(file_name, sub_dir)
-
-        try:
-            src = Path(source_path)
-            if not src.exists():
-                self.logger.warning(f"File no longer exists, cannot add to zip: {src}")
+        with self._zip_lock:
+            if self._zip_file is None:
                 return
 
-            # Build internal zip path: {verdict_basename}/{sub_dir}/{file_name}
-            if sub_dir:
-                internal_path = f"{verdict_basename}/{sub_dir}/{file_name}"
-            else:
-                internal_path = f"{verdict_basename}/{file_name}"
+            display_path = PathHandler.display_path(file_name, sub_dir)
 
-            self._zip_file.write(src, internal_path)
-            self.logger.debug(f"Added to zip: {internal_path}")
+            try:
+                src = Path(source_path)
+                if not src.exists():
+                    self.logger.warning(f"File no longer exists, cannot add to zip: {src}")
+                    return
 
-        except Exception as e:
-            self.logger.error(
-                f"Failed to add file to zip archive ({display_path}): {e}"
-            )
+                # Build internal zip path: {verdict_basename}/{sub_dir}/{file_name}
+                if sub_dir:
+                    internal_path = f"{verdict_basename}/{sub_dir}/{file_name}"
+                else:
+                    internal_path = f"{verdict_basename}/{file_name}"
+
+                self._zip_file.write(src, internal_path)
+                self.logger.debug(f"Added to zip: {internal_path}")
+
+            except Exception as e:
+                self.logger.error(
+                    f"Failed to add file to zip archive ({display_path}): {e}"
+                )
 
     def consolidate(self, temp_dir, verdict_basenames, password):
         """

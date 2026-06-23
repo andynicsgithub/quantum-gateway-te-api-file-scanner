@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v13.0 (alpha)
+file_watcher.py v13.1 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)
@@ -16,6 +16,7 @@ import threading
 import logging
 from pathlib import Path
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
@@ -386,8 +387,11 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
         # Shared collision-tracking dict for sanitize_filename
         seen = {}
 
+        # Phase 1: Discover and categorize files (TE vs AV fallback)
+        te_files = []
+        av_files = []
+
         for file_path in file_paths:
-            # Verify file still exists
             if not os.path.exists(file_path):
                 batch_logger.warning(f"File no longer exists: {file_path}")
                 continue
@@ -402,137 +406,145 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                 if sub_dir == ".":
                     sub_dir = ""
 
-                # Check file size for AV fallback routing
                 try:
                     file_size = os.path.getsize(full_path)
                 except OSError:
                     file_size = 0
 
                 if file_size >= get_te_threshold_bytes(config):
-                    # Large file — route to AV or error directory
-                    display_path = PathHandler.display_path(file_name, sub_dir)
-                    batch_logger.info(
-                        f"Large file detected: {display_path} ({file_size / (1024*1024):.1f} MB)"
-                    )
-
-                    if config.av_fallback_enabled:
-                        # Route to AV fallback
-                        try:
-                            from av_handler import AVHandler
-                            with AVHandler(config) as av:
-                                result = av.process_file(
-                                    file_name, safe_file_name, sub_dir,
-                                    full_path, batch_zip_mgr,
-                                )
-                        except ImportError:
-                            batch_logger.error(
-                                f"AV fallback enabled but paramiko not installed: {file_name}"
-                            )
-                            result = {
-                                "name": file_name,
-                                "path": sub_dir if sub_dir else "",
-                                "verdict": "Error",
-                                "status": "error",
-                                "tex_status": None,
-                                "av_verdict": "paramiko_not_installed",
-                            }
-                            _move_to_error_in_watch(
-                                file_name, sub_dir, full_path, config, batch_logger
-                            )
-
-                        # Log AV verdict outcome
-                        verdict = result.get("verdict", "Unknown")
-                        av_verdict = result.get("av_verdict", "")
-                        if av_verdict == "Transfer_Failed":
-                            batch_logger.error(
-                                f"AV transfer failed for {display_path} — "
-                                "file stays in input"
-                            )
-                        elif av_verdict == "Skipped_Above_AV_Limit":
-                            batch_logger.warning(
-                                f"AV skipped for {display_path} "
-                                f"({file_size / (1024*1024*1024):.1f} GB > 2 GB limit)"
-                            )
-                        elif verdict == "Malicious":
-                            batch_logger.warning(
-                                f"AV MALICIOUS: {display_path} — "
-                                f"verdict: {verdict} (action: drop)"
-                            )
-                        elif verdict == "Benign":
-                            batch_logger.info(
-                                f"AV benign: {display_path} (action: accept)"
-                            )
-                        elif verdict == "Error":
-                            batch_logger.warning(
-                                f"AV error for {display_path} ({av_verdict})"
-                            )
-                    else:
-                        # AV not configured — move to error directory
-                        batch_logger.warning(
-                            f"AV fallback not configured for large file: {display_path}"
-                        )
-                        _move_to_error_in_watch(
-                            file_name, sub_dir, full_path, config, batch_logger
-                        )
-                        result = {
-                            "name": file_name,
-                            "path": sub_dir if sub_dir else "",
-                            "verdict": "Error",
-                            "status": "error",
-                            "tex_status": None,
-                            "av_verdict": "AV_Not_Configured",
-                        }
-
+                    av_files.append((file_path, file_name, safe_file_name, sub_dir, full_path, file_size))
                 else:
-                    # Normal file — process via TE
-                    display_path = PathHandler.display_path(file_name, sub_dir)
-                    batch_logger.info(f"Processing: {display_path}")
-
-                    result = process_single_file(
-                        file_name, safe_file_name, sub_dir, full_path,
-                        config, url, url_tex,
-                        batch_zip_mgr,
-                    )
-
-                batch_summary["all_files"].append(result)
-                batch_summary["processed"] += 1
-
-                verdict = result["verdict"]
-                if verdict == "Malicious":
-                    batch_summary["malicious"] += 1
-                    batch_summary["malicious_files"].append({"name": file_name, "verdict": verdict})
-                elif verdict == "Benign":
-                    batch_summary["benign"] += 1
-                elif verdict == "Error":
-                    batch_summary["error"] += 1
-
+                    te_files.append((file_path, file_name, safe_file_name, sub_dir, full_path))
             except Exception as e:
-                # Use file_path (the loop variable) for accurate error reporting
-                batch_logger.error(f"Error processing {file_path}: {e}")
-                batch_summary["error"] += 1
-                batch_summary["all_files"].append(
-                    {
-                        "name": file_path,
-                        "path": "",
-                        "verdict": "Error",
-                        "tex_status": None,
-                    }
-                )
-                # Try to move to error directory manually
-                try:
-                    error_sub = str(Path(file_path).parent.relative_to(config.input_directory))
-                    if error_sub == ".":
-                        error_sub = ""
-                    error_path = config.error_directory / error_sub / Path(file_path).name
-                    PathHandler.safe_move(file_path, error_path)
-                    display = f"{error_sub}/{Path(file_path).name}" if error_sub else Path(file_path).name
-                    batch_logger.info(f"Moved {display} to error directory")
-                except Exception as move_error:
-                    batch_logger.error(
-                        f"Failed to move {file_path} to error directory: {move_error}"
-                    )
-                # Continue to next file
+                batch_logger.error(f"Error categorizing {file_path}: {e}")
                 continue
+
+        # Phase 2: Process TE files concurrently via ThreadPoolExecutor
+        if te_files:
+            batch_logger.info(
+                f"Processing {len(te_files)} files via TE (concurrency={config.concurrency})"
+            )
+            with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
+                futures = {}
+                for file_path, file_name, safe_file_name, sub_dir, full_path in te_files:
+                    batch_logger.info(f"Processing: {PathHandler.display_path(file_name, sub_dir)}")
+                    future = pool.submit(
+                        process_single_file,
+                        file_name, safe_file_name, sub_dir, full_path,
+                        config, url, url_tex, batch_zip_mgr,
+                    )
+                    futures[future] = (file_path, file_name, sub_dir)
+
+                for future in as_completed(futures):
+                    file_path, file_name, sub_dir = futures[future]
+                    try:
+                        result = future.result()
+                        batch_summary["all_files"].append(result)
+                        batch_summary["processed"] += 1
+
+                        verdict = result["verdict"]
+                        if verdict == "Malicious":
+                            batch_summary["malicious"] += 1
+                            batch_summary["malicious_files"].append({"name": file_name, "verdict": verdict})
+                        elif verdict == "Benign":
+                            batch_summary["benign"] += 1
+                        elif verdict == "Error":
+                            batch_summary["error"] += 1
+                    except Exception as e:
+                        batch_logger.error(f"Error processing {file_path}: {e}")
+                        batch_summary["error"] += 1
+                        batch_summary["all_files"].append(
+                            {
+                                "name": file_path,
+                                "path": "",
+                                "verdict": "Error",
+                                "tex_status": None,
+                            }
+                        )
+
+        # Phase 3: Process AV fallback files sequentially (SSH-based, not safe for threads)
+        for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in av_files:
+            display_path = PathHandler.display_path(file_name, sub_dir)
+            batch_logger.info(
+                f"Large file detected: {display_path} ({file_size / (1024*1024):.1f} MB)"
+            )
+
+            if config.av_fallback_enabled:
+                try:
+                    from av_handler import AVHandler
+                    with AVHandler(config) as av:
+                        result = av.process_file(
+                            file_name, safe_file_name, sub_dir,
+                            full_path, batch_zip_mgr,
+                        )
+                except ImportError:
+                    batch_logger.error(
+                        f"AV fallback enabled but paramiko not installed: {file_name}"
+                    )
+                    result = {
+                        "name": file_name,
+                        "path": sub_dir if sub_dir else "",
+                        "verdict": "Error",
+                        "status": "error",
+                        "tex_status": None,
+                        "av_verdict": "paramiko_not_installed",
+                    }
+                    _move_to_error_in_watch(
+                        file_name, sub_dir, full_path, config, batch_logger
+                    )
+
+                verdict = result.get("verdict", "Unknown")
+                av_verdict = result.get("av_verdict", "")
+                if av_verdict == "Transfer_Failed":
+                    batch_logger.error(
+                        f"AV transfer failed for {display_path} — "
+                        "file stays in input"
+                    )
+                elif av_verdict == "Skipped_Above_AV_Limit":
+                    batch_logger.warning(
+                        f"AV skipped for {display_path} "
+                        f"({file_size / (1024*1024*1024):.1f} GB > 2 GB limit)"
+                    )
+                elif verdict == "Malicious":
+                    batch_logger.warning(
+                        f"AV MALICIOUS: {display_path} — "
+                        f"verdict: {verdict} (action: drop)"
+                    )
+                elif verdict == "Benign":
+                    batch_logger.info(
+                        f"AV benign: {display_path} (action: accept)"
+                    )
+                elif verdict == "Error":
+                    batch_logger.warning(
+                        f"AV error for {display_path} ({av_verdict})"
+                    )
+            else:
+                batch_logger.warning(
+                    f"AV fallback not configured for large file: {display_path}"
+                )
+                _move_to_error_in_watch(
+                    file_name, sub_dir, full_path, config, batch_logger
+                )
+                result = {
+                    "name": file_name,
+                    "path": sub_dir if sub_dir else "",
+                    "verdict": "Error",
+                    "status": "error",
+                    "tex_status": None,
+                    "av_verdict": "AV_Not_Configured",
+                }
+
+            batch_summary["all_files"].append(result)
+            batch_summary["processed"] += 1
+
+            verdict = result["verdict"]
+            if verdict == "Malicious":
+                batch_summary["malicious"] += 1
+                batch_summary["malicious_files"].append({"name": file_name, "verdict": verdict})
+            elif verdict == "Benign":
+                batch_summary["benign"] += 1
+            elif verdict == "Error":
+                batch_summary["error"] += 1
 
         # Close zip archive for this batch
         if batch_zip_mgr:
