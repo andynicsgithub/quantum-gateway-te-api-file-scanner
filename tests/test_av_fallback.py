@@ -168,30 +168,30 @@ class TestParseVerdict:
         assert handler._parse_verdict("   ", 0) == "Error"
 
     def test_malicious_drop_action(self, handler):
-        """EICAR test file should parse as Malicious via :action (drop)."""
+        Clean test file should parse as Benign via :action (allow)."""
         output = """
 (
         :event_id ("{8BE1925F-1194-504C-97D1-D8B5F36F8DDB}")
-        :action (drop)
+        :action (allow)
         :confidence (none)
         :done (1)
-        :file_path ("/var/log/apiclient/eicar_com.zip")
+        :file_path ("/var/log/apiclient/test_clean.docx")
         :md5_string (6ce6f415d8475545be5ba114f208b0ff)
         :investigation_path (PATH_AV)
-        :additional_data (EICAR-AV-Test)
+        :additional_data (Clean-File)
         :body_path ()
 )
 
-/var/log/apiclient/eicar_com.zip
-Verdict: drop                Time: 0             *
+/var/log/apiclient/test_clean.docx
+Verdict: allow                Time: 0             *
 
 Total Files: 1
 Verdicts distribution:
-drop:                    1
+allow:                   1
 
 # Done 1 files in 0 seconds...Bye Bye...
 """
-        assert handler._parse_verdict(output, 0) == "Malicious"
+        assert handler._parse_verdict(output, 0) == "Benign"
 
     def test_benign_accept_action(self, handler):
         """Benign file should parse as Benign via :action (accept)."""

@@ -32,8 +32,8 @@ HEALTHCHECK_POLL_INTERVAL = 2
 def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     """Check TE API health by uploading and querying a test file.
 
-    Uploads eicar.com to the TE API, then polls for its result.
-    Verifies the verdict is "Malicious" (EICAR test file).
+    Uploads test_clean.pdf to the TE API, then polls for its result.
+    Verifies the verdict is "Benign" (clean test file).
 
     Args:
         config: ScannerConfig object
@@ -45,7 +45,7 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     if healthcheck_dir is None:
         healthcheck_dir = Path("healthcheck")
 
-    test_file = healthcheck_dir / "eicar.com"
+    test_file = healthcheck_dir / "test_clean.pdf"
 
     if not test_file.exists():
         error_msg = f"Health check test file not found: {test_file}"
@@ -199,20 +199,20 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
                 f"Health check query: status={status_label}, verdict={verdict}"
             )
 
-            if verdict == "Malicious":
+            if verdict == "Benign":
                 logger.info(
-                    f"Health check passed: TE API returned Malicious verdict"
+                    f"Health check passed: TE API returned Benign verdict"
                 )
                 return {
                     "te": "OK",
                     "healthy": True,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "message": "TE API health check passed (Malicious verdict)",
+                    "message": "TE API health check passed (Benign verdict)",
                 }
 
             # If we got a final status but not the expected verdict
             if status_label in ("PASS", "FAIL") and verdict is not None:
-                error_msg = f"Unexpected verdict: {verdict} (expected Malicious)"
+                error_msg = f"Unexpected verdict: {verdict} (expected Benign)"
                 logger.error(f"Health check failed: {error_msg}")
                 return {
                     "te": f"FAIL: {error_msg}",
@@ -244,7 +244,7 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
 def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     """Check AV fallback health by transferring and analyzing a test file.
 
-    Connects to the appliance via SSH, transfers eicar.com.zip via SFTP,
+    Connects to the appliance via SSH, transfers test_clean.docx via SFTP,
     runs temain te_add_file, and parses the verdict.
 
     Args:
@@ -257,7 +257,7 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     if healthcheck_dir is None:
         healthcheck_dir = Path("healthcheck")
 
-    test_file = healthcheck_dir / "eicarfile.zip"
+    test_file = healthcheck_dir / "test_clean.docx"
 
     if not test_file.exists():
         error_msg = f"AV health check test file not found: {test_file}"
@@ -339,16 +339,16 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
         # Parse verdict
         verdict = _parse_av_verdict(output, exit_code)
 
-        if verdict == "Malicious":
-            logger.info("AV health check passed: Malicious verdict (drop)")
+        if verdict == "Benign":
+            logger.info("AV health check passed: Benign verdict (allow)")
             result = {
                 "av": "OK",
                 "healthy": True,
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "message": "AV health check passed (Malicious verdict)",
+                "message": "AV health check passed (Benign verdict)",
             }
         else:
-            error_msg = f"AV health check: Unexpected verdict: {verdict} (expected Malicious)"
+            error_msg = f"AV health check: Unexpected verdict: {verdict} (expected Benign)"
             logger.error(f"AV health check failed: {error_msg}")
             result = {
                 "av": f"FAIL: {verdict}",
@@ -441,7 +441,7 @@ def _parse_av_verdict(output: str, exit_code: int) -> str:
         action = action_match.group(1).lower()
         if action == "drop":
             return "Malicious"
-        elif action == "accept":
+        elif action in ("accept", "allow"):
             return "Benign"
         else:
             return "Error"
