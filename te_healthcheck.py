@@ -174,11 +174,26 @@ def check_te_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
             except (KeyError, IndexError):
                 status_label = "UNKNOWN"
 
-            # Check for combined_verdict
+            # Check for combined_verdict in te_eb first (early malicious verdict)
             try:
-                verdict = response_json["response"][0]["te"]["combined_verdict"]
+                verdict = response_json["response"][0]["te_eb"]["combined_verdict"]
             except (KeyError, IndexError):
-                verdict = None
+                # Fallback: check te section
+                try:
+                    verdict = response_json["response"][0]["te"]["combined_verdict"]
+                except (KeyError, IndexError):
+                    verdict = None
+
+            # Also check individual image reports for verdict
+            if verdict is None:
+                try:
+                    for image in response_json["response"][0]["te"]["images"]:
+                        image_verdict = image.get("report", {}).get("verdict")
+                        if image_verdict:
+                            verdict = image_verdict
+                            break
+                except (KeyError, IndexError):
+                    pass
 
             logger.debug(
                 f"Health check query: status={status_label}, verdict={verdict}"
