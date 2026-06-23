@@ -96,6 +96,7 @@ class ScannerConfig:
     ssh_password: str = ""
     av_remote_directory: str = "/var/log/apiclient"
     av_rule_id: int = 1
+    av_te_threshold_mb: int = 100  # Files >= this (MB) skip TE, go to AV
 
     # Health check configuration
     healthcheck_directory: Path = field(default_factory=lambda: Path("healthcheck"))
@@ -262,6 +263,7 @@ class ScannerConfig:
             "ssh_password": "",
             "av_remote_directory": "/var/log/apiclient",
             "av_rule_id": 1,
+            "av_te_threshold_mb": 100,
             "healthcheck_directory": "healthcheck",
         }
 
@@ -565,7 +567,7 @@ class ScannerConfig:
                     config_data[key] = value
 
         # AV fallback env vars
-        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id"}
+        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "av_te_threshold_mb"}
         for key in _av_env_keys:
             env_key = env_prefix + key.upper()
             if env_key in os.environ:
@@ -632,6 +634,7 @@ class ScannerConfig:
                 ("av_password", "ssh_password"),
                 ("av_remote_dir", "av_remote_directory"),
                 ("av_rule_id", "av_rule_id"),
+                ("av_te_threshold_mb", "av_te_threshold_mb"),
                 ("zip_archive_directory", "zip_archive_directory"),
                 ("tex_enabled", "tex_enabled"),
                 ("tex_url", "tex_url"),
@@ -823,6 +826,7 @@ class ScannerConfig:
             print(f"  SSH Password:          {'Set' if self.ssh_password else '(empty)'}")
             print(f"  Remote Directory:      {self.av_remote_directory}")
             print(f"  AV Rule ID:            {self.av_rule_id}")
+            print(f"  TE Threshold (MB):     {self.av_te_threshold_mb}")
 
         # Health Check Configuration
         print("Health Check:")

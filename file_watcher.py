@@ -21,8 +21,7 @@ from watchdog.events import FileSystemEventHandler
 from safe_filename import sanitize_filename
 from te_api import (
     process_single_file,
-    find_and_delete_empty_subdirectories,
-    TE_FILE_SIZE_LIMIT,
+    get_te_threshold_bytes,
 )
 from path_handler import PathHandler
 
@@ -409,7 +408,7 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                 except OSError:
                     file_size = 0
 
-                if file_size >= TE_FILE_SIZE_LIMIT:
+                if file_size >= get_te_threshold_bytes(config):
                     # Large file — route to AV or error directory
                     display_path = PathHandler.display_path(file_name, sub_dir)
                     batch_logger.info(
@@ -550,8 +549,13 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
 
         batch_logger.info("Batch processing complete, waiting for new files...")
 
-        # Clean up empty directories left behind after moving files
-        find_and_delete_empty_subdirectories(config.input_directory)
+        # NOTE: Do NOT clean up empty subdirectories here. Deleting watched
+        # subdirectories breaks the OS-level file event handles
+        # (inotify on Linux, ReadDirectoryChangesW on Windows). The watchdog
+        # Observer does not re-register deleted subdirectories, so any files
+        # copied into a newly-created subdirectory after deletion would be
+        # silently missed.  Empty subdirectories are harmless — they only
+        # contain moved (already-processed) files.
 
     # Create and start watcher
     try:
@@ -570,6 +574,8 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
 
         last_batch_time = time.time()
         idle_check_interval = 300  # 5 minutes in seconds
+        last_fallback_scan_time = time.time()
+        fallback_scan_interval = 30  # seconds between fallback scans
 
         while True:
             if stop_event:
@@ -604,6 +610,34 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                         ):
                             rotate_today_log(config.log_dir)
                             _swap_file_handler(config.log_dir)
+
+                # Fallback scan: periodically check input dir for files the
+                # watchdog observer may have missed (SMB mounts, race conditions,
+                # directories recreated after deletion). Runs every ~30 seconds.
+                if now - last_fallback_scan_time >= fallback_scan_interval:
+                    last_fallback_scan_time = now
+                    try:
+                        input_dir = Path(config.input_directory)
+                        for root, dirs, files in os.walk(input_dir):
+                            for fname in files:
+                                fpath = str(Path(root) / fname)
+                                resolved = str(Path(fpath).resolve())
+                                with watcher_thread.watcher._lock:
+                                    if resolved not in watcher_thread.watcher.pending_files:
+                                        watcher_thread.watcher.pending_files[resolved] = {
+                                            "created": time.time(),
+                                            "last_modified": time.time(),
+                                            "closed": False,
+                                            "size": os.path.getsize(fpath),
+                                        }
+                                        watcher_thread.watcher.last_activity = time.time()
+                        if watcher_thread.watcher.pending_files:
+                            logger.info(
+                                f"[WATCHER] Fallback scan found {len(watcher_thread.watcher.pending_files)} file(s) — triggering batch"
+                            )
+                            watcher_thread.watcher._check_batch_ready()
+                    except Exception as scan_err:
+                        logger.debug(f"[WATCHER] Fallback scan error: {scan_err}")
 
                 # Idle health check (every 5 min, only when pending queue is empty)
                 pending = watcher_thread.get_pending_count()

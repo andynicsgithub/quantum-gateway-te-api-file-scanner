@@ -34,8 +34,13 @@ logger = logging.getLogger("te_scanner.main")
 # =======================
 # Size Limits
 # =======================
-TE_FILE_SIZE_LIMIT = 104857600  # 100 MB — files >= this skip TE, go to AV
+TE_FILE_SIZE_LIMIT = 104857600  # 100 MB — default, overridden by config.av_te_threshold_mb
 AV_FILE_SIZE_LIMIT = 2097152000  # ~2 GB — files >= this are skipped entirely
+
+
+def get_te_threshold_bytes(config):
+    """Convert the config MB threshold to bytes."""
+    return config.av_te_threshold_mb * 1024 * 1024
 
 # =======================
 # Utility Functions
@@ -302,6 +307,19 @@ def main(stop_event=None, cli_args=None):
 
     logger.info("Configuration validated successfully")
 
+    # Email notification startup validation
+    if config.email_enabled:
+        if config.email_smtp_server and config.email_from and config.email_to:
+            logger.info(
+                f"Email notifications enabled: sending to {config.email_to}"
+            )
+        else:
+            logger.warning(
+                "Email notifications enabled but SMTP fields are incomplete "
+                "(smtp_server, from, and to are required). "
+                "Emails will not be sent until configuration is corrected."
+            )
+
     # Build API URLs
     # Port 18194 is the only port the TE API server listens on
     url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/"
@@ -547,7 +565,7 @@ def discover_files(input_directory, config):
             # Check file size for AV fallback routing
             try:
                 file_size = os.path.getsize(full_path)
-                if file_size >= TE_FILE_SIZE_LIMIT:
+                if file_size >= get_te_threshold_bytes(config):
                     av_files.add(file_info)
                     continue
             except OSError:
@@ -559,6 +577,43 @@ def discover_files(input_directory, config):
                 other_files.add(file_info)
 
     return archive_files, other_files, av_files
+
+
+def _get_verdict_basename(directory):
+    """
+    Get a safe name for a directory to use as a ZIP internal path prefix.
+
+    On Windows, pathlib.Path.name can return an empty string for UNC paths
+    (e.g. \\\\server\\share) when the path has no subdirectory components.
+    This helper detects UNC paths and uses PureWindowsPath.parts to extract
+    the last meaningful component, skipping the UNC root part (\\\\server\\).
+    """
+    try:
+        import platform
+
+        if platform.system() != "Windows":
+            return directory.name
+
+        path_str = str(directory)
+        if path_str.startswith("\\\\"):
+            # Windows UNC path detected
+            from pathlib import PureWindowsPath
+
+            win_path = PureWindowsPath(path_str)
+            parts = win_path.parts
+            # UNC parts: ('\\\\server\\', 'share', 'dir', ...) -> skip first
+            meaningful = parts[1:] if len(parts) > 1 else parts
+            if meaningful:
+                return meaningful[-1]
+            # UNC root with no subdirs (e.g. \\\\server\\share) -> extract share name
+            remainder = path_str[2:]  # strip leading \\
+            parts = remainder.split("\\")
+            if len(parts) >= 2:
+                return parts[1]  # index 0 = server, index 1 = share
+            return path_str
+    except Exception:
+        pass
+    return directory.name
 
 
 def process_discovered_files(
@@ -593,9 +648,9 @@ def process_discovered_files(
     zip_config = None
     temp_dir = None
     verdict_basenames = [
-        config.benign_directory.name,
-        config.quarantine_directory.name,
-        config.error_directory.name,
+        _get_verdict_basename(config.benign_directory),
+        _get_verdict_basename(config.quarantine_directory),
+        _get_verdict_basename(config.error_directory),
     ]
     if zip_mgr:
         temp_dir = str(

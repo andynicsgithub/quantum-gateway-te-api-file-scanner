@@ -131,6 +131,11 @@ class ZipArchiveManager:
 
         try:
             for verdict_basename in verdict_basenames:
+                if not verdict_basename:
+                    self.logger.debug(
+                        "Skipping consolidation for empty verdict basename"
+                    )
+                    continue
                 verdict_dir = temp_path / verdict_basename
                 if not verdict_dir.exists():
                     continue
