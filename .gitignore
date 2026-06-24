@@ -16,6 +16,7 @@ venv/
 
 # Local configuration files (template is config.ini.default)
 config.ini
+config.ini.customer
 
 # Test directories (auto-generated)
 test_benign/
@@ -30,6 +31,10 @@ logs/
 
 # Plan directories (working documents)
 plans/
+
+# Publish/release artifacts
+publish.sh
+releases/
 
 # IDE and editor files
 .idea/
