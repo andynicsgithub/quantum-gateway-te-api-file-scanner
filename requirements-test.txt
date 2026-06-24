@@ -1,0 +1,7 @@
+# TE API Scanner Test Dependencies
+# For local development only - not needed for production deployment
+
+pytest>=7.0
+pytest-cov>=4.0
+responses>=2.0
+freezegun>=1.0

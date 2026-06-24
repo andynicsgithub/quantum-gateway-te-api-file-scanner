@@ -369,7 +369,7 @@ For each file:
 ## Installation
 
 ### Prerequisites
-- Python 3.7 or higher
+- Python 3.9 or higher (required for `set[str]`, `set[int]` type annotations)
 - Network access to Check Point Threat Emulation appliance
 
 ### Install Dependencies
@@ -385,6 +385,12 @@ pip install -r requirements.txt
 
 # Or if 'pip' is not recognized, use:
 python -m pip install -r requirements.txt
+```
+
+The `requirements.txt` contains only runtime dependencies (no test packages). For local development (running tests), install test dependencies separately:
+
+```bash
+pip install -r requirements-test.txt
 ```
 
 The `requirements.txt` includes platform-specific dependencies (e.g., `pywin32` on Windows).

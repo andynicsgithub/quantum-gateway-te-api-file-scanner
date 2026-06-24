@@ -214,7 +214,7 @@ xml = true
 # Uses SFTP to transfer files and SSH to trigger analysis on the appliance.
 # IMPORTANT: ssh_password is stored in plaintext. Use environment variables
 # (TE_SSH_PASSWORD) for sensitive deployments.
-# av_te_threshold_mb — files >= this value skip TE and go to AV.
+# av_te_threshold_mb - files >= this value skip TE and go to AV.
 # Increase if your TE appliance handles larger files better. Default: 100.
 
 av_fallback_enabled = false

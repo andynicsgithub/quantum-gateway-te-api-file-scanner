@@ -280,7 +280,7 @@ class ScannerConfig:
         # 2. Override with config file
         if os.path.exists(config_file):
             parser = configparser.ConfigParser()
-            parser.read(config_file)
+            parser.read(config_file, encoding='utf-8-sig')
 
             # Read from DEFAULT section
             # NOTE: Unlike LOGGING/WATCHER/EMAIL/TEX sections, we do NOT use
@@ -467,7 +467,7 @@ class ScannerConfig:
                 )
 
                 try:
-                    with open(config_file, "r") as f:
+                    with open(config_file, "r", encoding='utf-8-sig') as f:
                         in_section = False
                         for line in f:
                             stripped = line.strip()
