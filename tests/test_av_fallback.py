@@ -168,11 +168,11 @@ class TestParseVerdict:
         assert handler._parse_verdict("   ", 0) == "Error"
 
     def test_malicious_drop_action(self, handler):
-        Clean test file should parse as Benign via :action (allow)."""
+        """Clean test file should parse as Benign via :action (accept)."""
         output = """
 (
         :event_id ("{8BE1925F-1194-504C-97D1-D8B5F36F8DDB}")
-        :action (allow)
+        :action (accept)
         :confidence (none)
         :done (1)
         :file_path ("/var/log/apiclient/test_clean.docx")
@@ -183,11 +183,11 @@ class TestParseVerdict:
 )
 
 /var/log/apiclient/test_clean.docx
-Verdict: allow                Time: 0             *
+Verdict: accept              Time: 0             *
 
 Total Files: 1
 Verdicts distribution:
-allow:                   1
+accept:                  1
 
 # Done 1 files in 0 seconds...Bye Bye...
 """

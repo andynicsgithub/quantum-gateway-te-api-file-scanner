@@ -124,7 +124,7 @@ class TestCheckAVHealth:
         mock_channel.recv_exit_status.return_value = 0
         mock_stdout = mock.MagicMock()
         mock_stdout.channel = mock_channel
-        mock_stdout.read.return_value = b":action (allow) :status (0)"
+        mock_stdout.read.return_value = b":action (accept) :status (0)"
         mock_client.exec_command.return_value = (mock.MagicMock(), mock_stdout, mock.MagicMock())
 
         hc_dir = Path(__file__).parent / "_test_hc_av1"
@@ -162,7 +162,7 @@ class TestCheckAVHealth:
             mock_channel.recv_exit_status.return_value = 0
             mock_stdout = mock.MagicMock()
             mock_stdout.channel = mock_channel
-            mock_stdout.read.return_value = b":action (allow) :status (0)"
+            mock_stdout.read.return_value = b":action (accept) :status (0)"
             mock_stderr = mock.MagicMock()
             mock_stderr.read.return_value = b""
             mock_client.exec_command.return_value = (mock.MagicMock(), mock_stdout, mock_stderr)
@@ -179,6 +179,35 @@ class TestCheckAVHealth:
                 result = check_av_health(config, hc_dir)
             # check_av_health still runs even if disabled - the caller gates this
             assert result["healthy"] is True, f"Expected healthy, got: {result}"
+        finally:
+            (hc_dir / "test_clean.docx").unlink(missing_ok=True)
+
+    def test_check_av_health_remote_dir_not_found(self):
+        """AV SFTP put with missing remote directory should return actionable error."""
+        import paramiko
+        mock_client = mock.MagicMock()
+        mock_sftp = mock.MagicMock()
+        mock_sftp.put.side_effect = OSError(2, "No such file")
+        mock_client.open_sftp.return_value = mock_sftp
+
+        hc_dir = Path(__file__).parent / "_test_hc_av4"
+        hc_dir.mkdir(parents=True, exist_ok=True)
+        (hc_dir / "test_clean.docx").write_bytes(b"test")
+
+        try:
+            from te_healthcheck import check_av_health
+            config = _make_config(
+                av_fallback_enabled=True,
+                ssh_username="testuser",
+                ssh_password="testpass",
+                av_remote_directory="/var/log/apiclient",
+            )
+            with mock.patch("paramiko.SSHClient", return_value=mock_client):
+                result = check_av_health(config, hc_dir)
+            assert result["healthy"] is False, f"Expected healthy=False, got: {result}"
+            assert "AV destination directory does not exist" in result["av"]
+            assert "config.ini" in result["av"]
+            assert "[Errno 2]" not in result["av"]
         finally:
             (hc_dir / "test_clean.docx").unlink(missing_ok=True)
 

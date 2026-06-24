@@ -367,10 +367,17 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
         return result
 
     except Exception as e:
-        error_msg = f"AV health check failed: {e}"
+        if isinstance(e, OSError) and getattr(e, "errno", None) == 2:
+            error_msg = (
+                "AV destination directory does not exist; "
+                "check the directories on the appliance match "
+                "the definition in config.ini"
+            )
+        else:
+            error_msg = f"AV health check failed: {e}"
         logger.error(f"AV health check failed: {error_msg}")
         return {
-            "av": f"FAIL: {str(e)}",
+            "av": f"FAIL: {error_msg}",
             "healthy": False,
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message": error_msg,
@@ -441,7 +448,7 @@ def _parse_av_verdict(output: str, exit_code: int) -> str:
         action = action_match.group(1).lower()
         if action == "drop":
             return "Malicious"
-        elif action in ("accept", "allow"):
+        elif action == "accept":
             return "Benign"
         else:
             return "Error"

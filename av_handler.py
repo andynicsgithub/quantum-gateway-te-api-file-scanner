@@ -171,9 +171,16 @@ class AVHandler:
                 logger.info(f"File transferred: {remote_name}")
                 return True
             except Exception as e:
-                logger.warning(
-                    f"Transfer attempt {attempt + 1} failed for {remote_name}: {e}"
-                )
+                if isinstance(e, OSError) and getattr(e, "errno", None) == 2:
+                    transfer_err = (
+                        f"Transfer attempt {attempt + 1} failed for {remote_name}: "
+                        "AV destination directory does not exist; "
+                        "check the directories on the appliance match "
+                        "the definition in config.ini"
+                    )
+                else:
+                    transfer_err = f"Transfer attempt {attempt + 1} failed for {remote_name}: {e}"
+                logger.warning(transfer_err)
                 if attempt < self._max_retries - 1:
                     import time
                     time.sleep(self._retry_delay)
