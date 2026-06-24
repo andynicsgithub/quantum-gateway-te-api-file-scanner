@@ -37,7 +37,7 @@ def send_batch_notification(config, summary):
 
     if config.email_malicious_only and summary.get("malicious", 0) == 0:
         logger = logging.getLogger("te_scanner.notification")
-        logger.debug("Email suppressed by malicious-only filter")
+        logger.info("Email suppressed (no malicious files found; email_malicious_only is enabled)")
         return
 
     if not config.email_smtp_server or not config.email_from or not config.email_to:
