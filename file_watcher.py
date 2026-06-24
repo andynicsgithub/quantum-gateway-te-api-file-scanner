@@ -540,6 +540,42 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                     "av_verdict": "AV_Not_Configured",
                 }
 
+            # Move file to verdict directory (mirrors te_api.py AV move logic)
+            verdict = result.get("verdict", "Error")
+            av_verdict = result.get("av_verdict", "")
+
+            # Transfer_Failed: file never left local system, leave in input for retry
+            if av_verdict == "Transfer_Failed":
+                pass
+            # AV not configured already handled by _move_to_error_in_watch above
+            elif av_verdict == "AV_Not_Configured":
+                pass
+            else:
+                if verdict == "Malicious":
+                    dest = config.quarantine_directory / sub_dir / file_name
+                    action = "quarantine"
+                elif verdict == "Benign":
+                    dest = config.benign_directory / sub_dir / file_name
+                    action = "benign"
+                else:
+                    dest = config.error_directory / sub_dir / file_name
+                    action = "error"
+
+                # Add file to batch zip archive before moving
+                if batch_zip_mgr:
+                    try:
+                        batch_zip_mgr.add_file(full_path, action, sub_dir, file_name)
+                    except Exception as e:
+                        batch_logger.warning(f"Failed to add {file_name} to zip: {e}")
+
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    PathHandler.safe_move(Path(full_path), dest)
+                    batch_logger.info(f"AV {action}: moved {file_name} to {action} directory")
+                except Exception as e:
+                    batch_logger.error(f"AV: failed to move {file_name} to {action}: {e}")
+                    result["verdict"] = "Error"
+
             batch_summary["all_files"].append(result)
             batch_summary["processed"] += 1
 
