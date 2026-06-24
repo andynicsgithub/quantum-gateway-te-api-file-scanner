@@ -788,6 +788,7 @@ def process_discovered_files(
                     "status": "error",
                     "tex_status": None,
                     "av_verdict": "AV_Not_Configured",
+                    "error_detail": "File exceeds TE size limit, AV fallback not configured",
                 })
             except Exception as e:
                 logger.error(f"Failed to handle large file {file_name}: {e}")
@@ -798,6 +799,7 @@ def process_discovered_files(
                     "status": "error",
                     "tex_status": None,
                     "av_verdict": "AV_Not_Configured",
+                    "error_detail": f"AV_Not_Configured: {e}",
                 })
 
     # Consolidate temp directory files into the zip (multiprocessing mode)
@@ -943,12 +945,16 @@ def process_single_file(file_name, safe_file_name, sub_dir, full_path, config, u
         "verdict": "Unknown",
         "status": "success",
         "tex_status": te._tex_status,
+        "error_detail": None,
     }
 
     if te.final_status_label == "FOUND":
         result["verdict"] = te.parse_verdict(te.final_response, "te")
     else:
         result["verdict"] = te.final_status_label if te.final_status_label else "Not_Found"
+        # Capture error/detail context for non-FOUND statuses
+        if te.final_status_label:
+            result["error_detail"] = te.final_status_label
 
     return result
 
@@ -991,6 +997,7 @@ def process_files(
             "verdict": "Unknown",
             "status": "error",
             "tex_status": None,
+            "error_detail": str(e)[:500],
         }
 
     return result

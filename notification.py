@@ -300,15 +300,21 @@ def _format_file_list(all_files):
         name = f.get("name", "unknown")
         verdict = f.get("verdict", "unknown")
         tex_status = f.get("tex_status")
+        error_detail = f.get("error_detail")
         if path:
             file_display = f"{path}/{name}"
         else:
             file_display = name
         tex_msg = _get_tex_status_message(tex_status)
+        # Build the base display line
         if tex_msg:
-            lines.append(f"  {file_display} - {verdict} and TEX {tex_msg}")
+            base_line = f"  {file_display} - {verdict} and TEX {tex_msg}"
         else:
-            lines.append(f"  {file_display} - {verdict}")
+            base_line = f"  {file_display} - {verdict}"
+        # Append error detail for error files
+        if error_detail:
+            base_line += f" ({error_detail})"
+        lines.append(base_line)
     return "\n".join(lines)
 
 

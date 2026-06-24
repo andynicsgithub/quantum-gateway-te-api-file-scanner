@@ -232,7 +232,17 @@ class TE(object):
                     url=self.url + "upload", files=curr_file, verify=not self.skip_tls_verify, timeout=30
                 )
         except Exception as e:
-            self.logger.error("Upload file failed: {}".format(e))
+            self.logger.error(
+                "{} - Upload failed: {} [exception_type={}]\n"
+                "  File size: {} bytes\n"
+                "  URL: {}".format(
+                    self.log_path,
+                    e,
+                    type(e).__name__,
+                    self.full_path.stat().st_size if self.full_path.exists() else "unknown",
+                    self.url + "upload",
+                )
+            )
             self.move_file(self.error_directory)
             raise RuntimeError("Upload failed: {}".format(e)) from e
         response_j = response.json()
@@ -646,6 +656,12 @@ class TE(object):
             self.logger.debug(
                 f"{self.log_path} - [ZIP] Error verdict (status={self.final_status_label}): basename={basename!r}"
             )
+            # Log the TE response details for debugging
+            status_label = self.final_status_label or "UNKNOWN"
+            self.logger.error(
+                f"{self.log_path} - TE Error verdict (status={status_label}). "
+                f"Response: {json.dumps(self.final_response, indent=2, default=str)[:2000]}"
+            )
             self._add_to_zip(basename)
             self.move_file(self.error_directory)
         elif self.final_status_label in ("FOUND", "PARTIALLY_FOUND"):
@@ -675,6 +691,16 @@ class TE(object):
                 )
                 self._add_to_zip(basename)
                 self.move_file(self.benign_directory)
+            else:
+                # PARTIALLY_FOUND or other status where no verdict was determined
+                # (e.g., verdict is "Error" but status is FOUND/PARTIALLY_FOUND)
+                basename = self.error_directory.name
+                self.logger.warning(
+                    f"{self.log_path} - Status={self.final_status_label} but verdict={verdict} "
+                    f"(not Benign/Malicious). Moving to error directory."
+                )
+                self._add_to_zip(basename)
+                self.move_file(self.error_directory)
         elif verdict == "Unknown":
             # Unknown verdict — this means TE status is still PENDING when
             # we reached the move logic. TEX processing is only for file
@@ -766,7 +792,7 @@ class TE(object):
         Args:
             verdict_basename: Directory name inside zip (e.g. 'benign', 'quarantine', 'error').
         """
-        self.logger.info(
+        self.logger.debug(
             f"[ZIP] _add_to_zip called for {self.log_path}, zip_config type={type(self.zip_config).__name__}, basename={verdict_basename}"
         )
 
@@ -782,7 +808,7 @@ class TE(object):
 
         # Single-process mode (watch mode): ZipArchiveManager instance
         if isinstance(self.zip_config, ZipArchiveManager):
-            self.logger.info(
+            self.logger.debug(
                 f"[ZIP] Single-process mode: adding {self.log_path} directly to zip"
             )
             self.zip_config.add_file(
@@ -810,7 +836,7 @@ class TE(object):
             self.logger.warning(f"[ZIP] temp_dir is empty, skipping {self.log_path}")
             return
 
-        self.logger.info(
+        self.logger.debug(
             f"[ZIP] Multiprocessing mode: copying {self.log_path} to temp dir: {temp_dir}"
         )
 
@@ -827,7 +853,7 @@ class TE(object):
                     if not chunk:
                         break
                     dst_f.write(chunk)
-            self.logger.info(
+            self.logger.debug(
                 f"Copied {self.log_path} to temp for zip: {('/').join(filter(None, [verdict_basename, self.sub_dir, self.file_name]))}"
             )
         except Exception as e:
