@@ -1,4 +1,4 @@
-  # This is config.ini.default v13.0 (alpha)
+  # This is config.ini.default v13.1 (alpha)
 [DEFAULT]
 #Directories - where the files are starting from and which directories they should be moved to when benign or malicious or causing an error etc.
 input_directory = /path/to/source/files
