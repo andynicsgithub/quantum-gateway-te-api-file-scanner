@@ -64,6 +64,9 @@ email_enabled = false
 # Send email only when malicious files are found (default: false = every batch)
 email_malicious_only = false
 
+# Attach today's log file to the notification email
+email_include_log = true
+
 # SMTP settings
 email_smtp_server =
 # none | starttls | smtp_ssl
@@ -88,9 +91,6 @@ email_subject_template = TE Scanner: ${processed} files processed - ${malicious}
 #   ${malicious}, ${error}, ${file_list}, ${malicious_files}, ${smtp_server}
 # Include ${file_list} in template to show detailed file listing
 email_template_file = data/email_template.txt
-
-# Attach today's log file to the notification email
-email_include_log = true
 
 # IMAP "Sent" folder settings (separate from SMTP credentials)
 # Set enabled=true to save sent emails to an IMAP folder
