@@ -22,6 +22,38 @@ from string import Template
 _SCRIPT_DIR = Path(__file__).resolve().parent
 
 
+def _read_today_log(log_dir):
+    """Read and return the content of today's active log file.
+
+    Returns the content string, or None if no log file found.
+    Tries today's .0 file first, then the most recent numbered .log from today.
+    """
+    from logger_config import LOG_PREFIX, DATE_PATTERN
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_log = f"{LOG_PREFIX}{today}.0.log"
+    log_path = Path(log_dir) / today_log
+
+    if log_path.exists():
+        return log_path.read_text(encoding="utf-8", errors="replace")
+
+    # Fallback: find the most recent today's log file
+    try:
+        log_dir_path = Path(log_dir)
+        candidates = [
+            f for f in log_dir_path.iterdir()
+            if f.is_file()
+            and f.name.startswith(LOG_PREFIX)
+            and today in f.name
+            and f.name.endswith(".log")
+        ]
+        if candidates:
+            candidates.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+            return candidates[0].read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+    return None
+
+
 def send_batch_notification(config, summary):
     """
     Send email notification after batch processing completes.
@@ -60,6 +92,19 @@ def send_batch_notification(config, summary):
         msg["Subject"] = subject
         msg["Date"] = format_datetime(datetime.now().astimezone(), usegmt=False)
         msg.attach(MIMEText(body, "plain"))
+
+        # Attach today's log file if configured
+        if getattr(config, "email_include_log", False):
+            log_content = _read_today_log(config.log_dir)
+            if log_content:
+                today = datetime.now().strftime("%Y%m%d")
+                attach_filename = f"te_scanner_log_{today}.txt"
+                log_part = MIMEText(log_content, "plain", "utf-8")
+                log_part.add_header("Content-Disposition", "attachment", filename=attach_filename)
+                msg.attach(log_part)
+                logger.info(f"Log attachment added: {attach_filename}")
+            else:
+                logger.warning("email_include_log is enabled but no log file found to attach")
 
         # Send via SMTP
         logger.debug(

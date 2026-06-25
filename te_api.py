@@ -196,6 +196,11 @@ def main(stop_event=None, cli_args=None):
         "--email-template-file", help="Path to email body template file"
     )
     parser.add_argument(
+        "--email-include-log",
+        action="store_true",
+        help="Attach today's log file to email notification",
+    )
+    parser.add_argument(
         "--email-malicious-only",
         action="store_true",
         help="Only send email if at least one malicious file is found",

@@ -57,6 +57,7 @@ class ScannerConfig:
     email_to: str = ""
     email_subject_template: str = ""
     email_template_file: str = "data/email_template.txt"
+    email_include_log: bool = False
 
     # IMAP - save sent copies
     email_imap_enabled: bool = False
@@ -248,6 +249,7 @@ class ScannerConfig:
             "email_to": "",
             "email_subject_template": "",
             "email_template_file": "data/email_template.txt",
+            "email_include_log": False,
             "email_imap_enabled": False,
             "email_imap_server": "",
             "email_imap_port": 993,
@@ -449,6 +451,7 @@ class ScannerConfig:
                  "email_imap_use_ssl",
                             "email_imap_skip_tls_verify",
                             "email_malicious_only",
+                            "email_include_log",
                         ]:
                             config_data[key] = value.lower() in [
                                 "true",
@@ -561,6 +564,7 @@ class ScannerConfig:
  "email_imap_use_ssl",
                     "email_imap_skip_tls_verify",
                     "email_malicious_only",
+                    "email_include_log",
                     "appliance_skip_tls_verify",
                     "tex_enabled",
                     "save_response_info",
@@ -632,6 +636,7 @@ class ScannerConfig:
                 ("email_subject_template", "email_subject_template"),
 ("email_template_file", "email_template_file"),
             ("email_malicious_only", "email_malicious_only"),
+            ("email_include_log", "email_include_log"),
             ("email_imap_enabled", "email_imap_enabled"),
                 ("email_imap_server", "email_imap_server"),
                 ("email_imap_port", "email_imap_port"),
@@ -736,6 +741,7 @@ class ScannerConfig:
  "email_imap_use_ssl",
             "email_imap_skip_tls_verify",
             "email_malicious_only",
+            "email_include_log",
         ]
         for key in _bool_fields:
             if key in config_data and not isinstance(config_data[key], bool):
