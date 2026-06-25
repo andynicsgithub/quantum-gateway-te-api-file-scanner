@@ -89,6 +89,9 @@ email_subject_template = TE Scanner: ${processed} files processed - ${malicious}
 # Include ${file_list} in template to show detailed file listing
 email_template_file = data/email_template.txt
 
+# Attach today's log file to the notification email
+email_include_log = true
+
 # IMAP "Sent" folder settings (separate from SMTP credentials)
 # Set enabled=true to save sent emails to an IMAP folder
 email_imap_enabled = false
