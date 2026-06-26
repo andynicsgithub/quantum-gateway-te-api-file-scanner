@@ -60,12 +60,14 @@ class CopyCompletionWatcher(FileSystemEventHandler):
 
         # State tracking
         self.pending_files = {}  # path -> {created, last_modified, closed, size}
+        self.last_log_time = {}  # path -> last log timestamp (for throttling)
         self._lock = threading.Lock()
         self.last_activity = 0.0
         self._batch_dispatched = False  # Set before batch callback, cleared after
         self._batch_processing = False  # True while batch callback is running
         self.batch_delay = config.watch_batch_delay
         self.max_batch = config.watch_max_batch
+        self.log_interval = 5.0  # 5 seconds between log notifications per file
 
         self.logger.info(
             f"CopyCompletionWatcher initialized: delay={self.batch_delay}s, max_batch={self.max_batch}"
@@ -118,25 +120,37 @@ class CopyCompletionWatcher(FileSystemEventHandler):
         """
         Triggered when file is modified (copy in progress).
         Updates last activity timestamp to reset batch timer.
+        Logs file growth events at most once every 5 seconds per file.
         """
         if event.is_directory:
             return
 
         try:
             file_path = str(Path(event.src_path).resolve())
-            self.logger.info(f"[WATCHER] on_modified: {file_path}")
 
             with self._lock:
                 if file_path not in self.pending_files:
                     return
+                
+                # Throttle logging: only log if 5 seconds have passed since last log for this file
+                now = time.time()
+                should_log = False
+                if file_path not in self.last_log_time or (now - self.last_log_time[file_path]) >= self.log_interval:
+                    should_log = True
+                    self.last_log_time[file_path] = now
+                
                 old_size = self.pending_files[file_path]["size"]
                 self.pending_files[file_path]["last_modified"] = time.time()
                 self.last_activity = time.time()
                 new_size = os.path.getsize(file_path)
                 self.pending_files[file_path]["size"] = new_size
-            self.logger.info(
-                f"[WATCHER] File growing: {file_path} ({old_size} → {new_size} bytes)"
-            )
+            
+            # Log outside the lock to avoid blocking event processing
+            if should_log:
+                self.logger.info(f"[WATCHER] on_modified: {file_path}")
+                self.logger.info(
+                    f"[WATCHER] File growing: {file_path} ({old_size} → {new_size} bytes)"
+                )
 
             self._check_batch_ready()
 
@@ -227,6 +241,7 @@ class CopyCompletionWatcher(FileSystemEventHandler):
 
             for path in file_paths:
                 self.pending_files.pop(path, None)
+                self.last_log_time.pop(path, None)  # Clean up log time tracking
 
         # Process stale files outside the lock (callback may be slow)
         self.logger.info(f"[WATCHER] {len(file_paths)} files ready for processing")
