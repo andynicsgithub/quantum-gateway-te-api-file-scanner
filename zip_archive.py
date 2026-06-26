@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-zip_archive.py v13.1 (alpha)
+zip_archive.py v13.2 (alpha)
 Manages creation of password-protected zip archives for batch file processing.
 Files are added to the zip before they are moved to verdict directories.
 

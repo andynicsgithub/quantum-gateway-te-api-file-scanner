@@ -1,4 +1,4 @@
-  # This is config.ini.default v13.1 (alpha)
+ # This is config.ini.default v13.2 (alpha)
 [DEFAULT]
 #Directories - where the files are starting from and which directories they should be moved to when benign or malicious or causing an error etc.
 input_directory = /path/to/source/files
@@ -127,6 +127,7 @@ tex_url =
 tex_api_key =
 tex_response_info_directory = tex_response_info
 tex_clean_files_directory = tex_clean_files
+te_max_file_size_mb = 15
 
 
 
@@ -217,15 +218,20 @@ xml = true
 # Uses SFTP to transfer files and SSH to trigger analysis on the appliance.
 # IMPORTANT: ssh_password is stored in plaintext. Use environment variables
 # (TE_SSH_PASSWORD) for sensitive deployments.
-# av_te_threshold_mb - files >= this value skip TE and go to AV.
+
+# te_to_av_fallback_at_mb - files >= this value skip TE and go to AV.
 # Increase if your TE appliance handles larger files better. Default: 100.
+# av_to_signature_fallback_at_mb - files >= this value skip AV path entirely
+# and use a lightweight MD5-based signature check via Check Point API.
+# Files above this threshold are not uploaded via SFTP. Default: 2048.
 
 av_fallback_enabled = false
 ssh_username = apiclient
 ssh_password =
 av_remote_directory = /var/log/apiclient
 av_rule_id = 1
-av_te_threshold_mb = 100
+te_to_av_fallback_at_mb = 100
+av_to_signature_fallback_at_mb = 2048
 
 [HEALTHCHECK]
 # Health check test files directory (relative to app directory).

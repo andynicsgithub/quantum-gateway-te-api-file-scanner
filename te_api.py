@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v13.1 (alpha)
+te_api v13.2 (alpha)
 """
 
 from te_file_handler import TE
@@ -21,6 +21,9 @@ from functools import partial
 from datetime import datetime
 import urllib3
 import te_healthcheck
+import requests
+import hashlib
+import json
 
  # Silence the urllib3 InsecureRequestWarning globally.
 # This is the standard way to suppress the "Unverified HTTPS request"
@@ -34,13 +37,75 @@ logger = logging.getLogger("te_scanner.main")
 # =======================
 # Size Limits
 # =======================
-TE_FILE_SIZE_LIMIT = 104857600  # 100 MB — default, overridden by config.av_te_threshold_mb
-AV_FILE_SIZE_LIMIT = 2097152000  # ~2 GB — files >= this are skipped entirely
+TE_FILE_SIZE_LIMIT = 104857600  # 100 MB — default, overridden by config.te_to_av_fallback_at_mb
+# AV_FILE_SIZE_LIMIT removed — now uses config.av_to_signature_fallback_at_mb (default 2048 MB)
 
 
 def get_te_threshold_bytes(config):
     """Convert the config MB threshold to bytes."""
-    return config.av_te_threshold_mb * 1024 * 1024
+    return config.te_to_av_fallback_at_mb * 1024 * 1024
+
+
+def get_av_signature_threshold_bytes(config):
+    """Convert the AV-to-signature config MB threshold to bytes."""
+    return config.av_to_signature_fallback_at_mb * 1024 * 1024
+
+
+def query_av_signature(config, md5_hash):
+    """Query Check Point API with MD5 hash and 'av' feature.
+
+    Args:
+        config: ScannerConfig object with appliance_ip and appliance_skip_tls_verify
+        md5_hash: MD5 hex digest string of the file
+
+    Returns:
+        Verdict string: "Benign", "Malicious", or "Error"
+    """
+    logger = logging.getLogger("te_scanner.main")
+    base_url = f"https://{config.appliance_ip}:18194/tecloud/api/v1/file/query"
+
+    request_data = {
+        "request": [
+            {
+                "features": ["av"],
+                "md5": md5_hash
+            }
+        ]
+    }
+
+    try:
+        response = requests.post(
+            url=base_url,
+            json=request_data,
+            verify=not config.appliance_skip_tls_verify,
+            timeout=30
+        )
+        response.raise_for_status()
+        response_json = response.json()
+
+        # Check response structure
+        if "response" in response_json and len(response_json["response"]) > 0:
+            response_entry = response_json["response"][0]
+            if "av" in response_entry:
+                av_result = response_entry["av"]
+                # Malicious: has malware_info object
+                if "malware_info" in av_result:
+                    logger.info(f"AV signature check: MALICIOUS (hash={md5_hash})")
+                    return "Malicious"
+                # Benign: has status but no malware_info
+                elif "status" in av_result:
+                    logger.info(f"AV signature check: BENIGN (hash={md5_hash})")
+                    return "Benign"
+
+        logger.warning(f"AV signature check: unexpected response format (hash={md5_hash})")
+        return "Error"
+
+    except requests.exceptions.RequestException as e:
+        logger.error(f"AV signature API request failed for hash {md5_hash}: {e}")
+        return "Error"
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        logger.error(f"AV signature response parse error for hash {md5_hash}: {e}")
+        return "Error"
 
 # =======================
 # Utility Functions
@@ -275,6 +340,21 @@ def main(stop_event=None, cli_args=None):
         help="AV rule ID for policy selection (default: from config, fallback: 1)",
     )
     parser.add_argument(
+        "--av-te-threshold-mb",
+        type=int,
+        help="Deprecated: use --av-to-signature-threshold-mb instead",
+    )
+    parser.add_argument(
+        "--av-to-signature-threshold-mb",
+        type=int,
+        help="Files >= this (MB) skip AV path and use MD5 signature check only (default: from config, 2048)",
+    )
+    parser.add_argument(
+        "--tex-max-file-size-mb",
+        type=int,
+        help="Skip TEX processing for files >= this (MB) (default: from config, 15)",
+    )
+    parser.add_argument(
         "--healthcheck-dir",
         help="Health check test files directory (default: from config, healthcheck/)",
     )
@@ -296,7 +376,7 @@ def main(stop_event=None, cli_args=None):
         log_retention_days=config.log_retention_days,
     )
 
-    logger.info("TE API Scanner v13.1 - Loading configuration...")
+    logger.info("TE API Scanner v13.2 - Loading configuration...")
 
     # Display configuration summary
     config.print_summary()
@@ -422,15 +502,15 @@ def main(stop_event=None, cli_args=None):
 
         # Process any existing files immediately (only if API is healthy)
         if api_healthy:
-            archive_files, other_files, av_files = discover_files(
+            archive_files, other_files, av_files, signature_files = discover_files(
                 config.input_directory, config
             )
-            has_files = archive_files or other_files or av_files
+            has_files = archive_files or other_files or av_files or signature_files
             if has_files:
-                file_count = len(archive_files) + len(other_files) + len(av_files)
+                file_count = len(archive_files) + len(other_files) + len(av_files) + len(signature_files)
                 logger.info(f"Processing {file_count} existing files...")
                 process_discovered_files(
-                    archive_files, other_files, av_files, config, url, url_tex, zip_mgr
+                    archive_files, other_files, av_files, signature_files, config, url, url_tex, zip_mgr
                 )
                 find_and_delete_empty_subdirectories(config.input_directory)
                 if zip_mgr:
@@ -475,19 +555,20 @@ def main(stop_event=None, cli_args=None):
         zip_mgr = _create_zip_manager(config)
 
         # Discover files
-        archive_files, other_files, av_files = discover_files(
+        archive_files, other_files, av_files, signature_files = discover_files(
             config.input_directory, config
         )
 
         logger.info("Begin handling input files by TE")
-        file_count = len(archive_files) + len(other_files) + len(av_files)
+        file_count = len(archive_files) + len(other_files) + len(av_files) + len(signature_files)
         logger.info(
             f"Found {len(archive_files)} archive files, "
-            f"{len(other_files)} non-archive files, and "
-            f"{len(av_files)} files for AV fallback"
+            f"{len(other_files)} non-archive files, "
+            f"{len(av_files)} files for AV fallback, and "
+            f"{len(signature_files)} files for MD5 signature check"
         )
 
-        if len(other_files) == 0 and len(archive_files) == 0 and len(av_files) == 0:
+        if len(other_files) == 0 and len(archive_files) == 0 and len(av_files) == 0 and len(signature_files) == 0:
             logger.info("No files to process. Exiting.")
             if zip_mgr:
                 zip_mgr.abort()
@@ -495,7 +576,7 @@ def main(stop_event=None, cli_args=None):
 
         # Process files
         process_discovered_files(
-            archive_files, other_files, av_files, config, url, url_tex, zip_mgr
+            archive_files, other_files, av_files, signature_files, config, url, url_tex, zip_mgr
         )
         find_and_delete_empty_subdirectories(config.input_directory)
 
@@ -524,17 +605,19 @@ def main(stop_event=None, cli_args=None):
 def discover_files(input_directory, config):
     """
     Discover files in input directory and categorize them as archives,
-    other, or AV fallback files.
+    other, AV fallback, or signature check files.
 
-    Files >= 100 MB are routed to AV fallback. Archives are processed
-    sequentially. All other files are processed in parallel via TE API.
+    Files are routed based on size thresholds:
+    - Files < te_to_av_fallback_at_mb: go to TE path (archives or other)
+    - Files >= te_to_av_fallback_at_mb and < av_to_signature_fallback_at_mb: go to AV fallback (SFTP+SSH)
+    - Files >= av_to_signature_fallback_at_mb: go to signature check (MD5 API query)
 
     Args:
         input_directory: Path to input directory
         config: ScannerConfig object with archive_extensions set
 
     Returns:
-        Tuple of (archive_files, other_files, av_files) as sets of
+        Tuple of (archive_files, other_files, av_files, signature_files) as sets of
         (file_name, safe_file_name, sub_dir, full_path) tuples
     """
     logger = logging.getLogger("te_scanner.main")
@@ -545,6 +628,7 @@ def discover_files(input_directory, config):
     archive_files = set()
     other_files = set()
     av_files = set()
+    signature_files = set()
 
     # Shared collision-tracking dict across all discovered files
     seen = {}
@@ -567,10 +651,13 @@ def discover_files(input_directory, config):
             # Create a 4-tuple: (real_name, safe_name, sub_dir, full_path)
             file_info = (file, safe_file_name, sub_dir, full_path)
 
-            # Check file size for AV fallback routing
+            # Check file size for AV fallback / signature routing
             try:
                 file_size = os.path.getsize(full_path)
-                if file_size >= get_te_threshold_bytes(config):
+                if file_size >= get_av_signature_threshold_bytes(config):
+                    signature_files.add(file_info)
+                    continue
+                elif file_size >= get_te_threshold_bytes(config):
                     av_files.add(file_info)
                     continue
             except OSError:
@@ -581,7 +668,7 @@ def discover_files(input_directory, config):
             else:
                 other_files.add(file_info)
 
-    return archive_files, other_files, av_files
+    return archive_files, other_files, av_files, signature_files
 
 
 def _get_verdict_basename(directory):
@@ -622,7 +709,7 @@ def _get_verdict_basename(directory):
 
 
 def process_discovered_files(
-    archive_files, other_files, av_files, config, url, url_tex="", zip_mgr=None
+    archive_files, other_files, av_files, signature_files, config, url, url_tex="", zip_mgr=None
 ):
     """
     Process discovered files using the existing processing logic.
@@ -632,11 +719,13 @@ def process_discovered_files(
     Archive files are processed sequentially in the main process and added directly
     to the zip.
     AV fallback files are processed sequentially after TE processing.
+    Signature check files are processed after AV files (MD5-based API query).
 
     Args:
         archive_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
         other_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
         av_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
+        signature_files: Set of (file_name, safe_file_name, sub_dir, full_path) tuples
         config: ScannerConfig object
         url: TE API URL
         url_tex: TEX API URL (may be empty if TEX disabled)
@@ -767,6 +856,83 @@ def process_discovered_files(
                         logger.error(f"AV: failed to move {file_name} to {action}: {e}")
 
                 all_files.extend(av_results)
+
+    # Signature check files: MD5-based API query (sequential)
+    if len(signature_files) > 0:
+        logger.info(f"Processing {len(signature_files)} files via MD5 signature check")
+        sig_benign = 0
+        sig_malicious = 0
+        sig_error = 0
+
+        for file_info in signature_files:
+            file_name, safe_file_name, sub_dir, full_path = file_info
+
+            # Compute MD5 hash
+            try:
+                md5_hash = hashlib.md5()
+                with open(str(full_path), "rb") as f:
+                    for chunk in iter(lambda: f.read(8192), b""):
+                        md5_hash.update(chunk)
+                md5_hex = md5_hash.hexdigest()
+            except OSError as e:
+                logger.error(f"Cannot compute MD5 for {file_name}: {e}")
+                _move_file_to_error(file_name, sub_dir, full_path, config)
+                sig_error += 1
+                all_files.append({
+                    "name": file_name,
+                    "path": sub_dir if sub_dir else "",
+                    "verdict": "Error",
+                    "status": "error",
+                    "tex_status": None,
+                    "av_verdict": "MD5_Compute_Failed",
+                    "error_detail": str(e),
+                })
+                continue
+
+            logger.info(
+                f"MD5 signature check for {file_name} ({md5_hex}, "
+                f"{full_path.stat().st_size:,} bytes)"
+            )
+
+            # Query AV signature API
+            verdict = query_av_signature(config, md5_hex)
+
+            if zip_mgr:
+                if isinstance(zip_mgr, tuple):
+                    zip_path, zip_pwd, benign_dir, quarantine_dir, error_dir, temp_dir = zip_mgr
+                    _add_file_to_temp(
+                        safe_name=file_name, local_path=full_path,
+                        sub_dir=sub_dir, verdict_dir=verdict,
+                        zip_path=zip_path, zip_pwd=zip_pwd,
+                        temp_dir=temp_dir
+                    )
+                else:
+                    zip_mgr.add_file(full_path, verdict, sub_dir, file_name)
+
+            # Move file to verdict directory
+            if verdict == "Malicious":
+                _move_file_to_quarantine(file_name, sub_dir, full_path, config)
+                sig_malicious += 1
+            elif verdict == "Benign":
+                _move_file_to_verdict(file_name, sub_dir, full_path, config, "benign")
+                sig_benign += 1
+            else:
+                _move_file_to_error(file_name, sub_dir, full_path, config)
+                sig_error += 1
+
+            all_files.append({
+                "name": file_name,
+                "path": sub_dir if sub_dir else "",
+                "verdict": verdict,
+                "status": "success" if verdict in ("Benign", "Malicious") else "error",
+                "tex_status": None,
+                "av_verdict": f"MD5_{verdict}",
+            })
+
+        logger.info(
+            f"MD5 signature check complete: {len(signature_files)} files processed "
+            f"({sig_benign} benign, {sig_malicious} malicious, {sig_error} errors)"
+        )
     elif len(av_files) > 0 and not config.av_fallback_enabled:
         logger.warning(
             f"{len(av_files)} files exceed TE size limit but AV fallback "
@@ -890,6 +1056,62 @@ def _move_file_to_error(file_name, sub_dir, full_path, config):
         logger.info(f"Moved to error: {display_name}")
     except Exception as e:
         logger.error(f"Failed to move {display_name} to error directory: {e}")
+
+
+def _move_file_to_quarantine(file_name, sub_dir, full_path, config):
+    """Move a file to the quarantine directory.
+
+    Args:
+        file_name: Original filename
+        sub_dir: Subdirectory relative to input
+        full_path: Full local path to the file
+        config: ScannerConfig object
+    """
+    from path_handler import PathHandler
+    display_name = PathHandler.display_path(file_name, sub_dir)
+    quarantine_dir = config.quarantine_directory
+    if sub_dir:
+        quarantine_dest = quarantine_dir / sub_dir / file_name
+    else:
+        quarantine_dest = quarantine_dir / file_name
+
+    quarantine_dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        PathHandler.safe_move(Path(full_path), quarantine_dest)
+        logger.info(f"Moved to quarantine: {display_name}")
+    except Exception as e:
+        logger.error(f"Failed to move {display_name} to quarantine directory: {e}")
+
+
+def _move_file_to_verdict(file_name, sub_dir, full_path, config, verdict_type):
+    """Move a file to a verdict directory by type.
+
+    Args:
+        file_name: Original filename
+        sub_dir: Subdirectory relative to input
+        full_path: Full local path to the file
+        config: ScannerConfig object
+        verdict_type: One of 'benign', 'quarantine', 'error'
+    """
+    from path_handler import PathHandler
+    display_name = PathHandler.display_path(file_name, sub_dir)
+    verdict_dirs = {
+        "benign": config.benign_directory,
+        "quarantine": config.quarantine_directory,
+        "error": config.error_directory,
+    }
+    target_dir = verdict_dirs.get(verdict_type, config.error_directory)
+    if sub_dir:
+        target_dest = target_dir / sub_dir / file_name
+    else:
+        target_dest = target_dir / file_name
+
+    target_dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        PathHandler.safe_move(Path(full_path), target_dest)
+        logger.info(f"Moved to {verdict_type}: {display_name}")
+    except Exception as e:
+        logger.error(f"Failed to move {display_name} to {verdict_type} directory: {e}")
 
 
 def find_and_delete_empty_subdirectories(input_directory):

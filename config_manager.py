@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-config_manager.py v13.1 (alpha)
+config_manager.py v13.2 (alpha)
 Type-safe configuration management for TE API Scanner.
 Supports loading from config file, command-line arguments, and environment variables.
 """
@@ -85,6 +85,7 @@ class ScannerConfig:
     )
     tex_supported_file_types: Set[str] = field(default_factory=set)
     tex_scrubbed_parts_codes: Set[int] = field(default_factory=set)
+    tex_max_file_size_mb: int = 15  # Files >= this (MB) skip TEX processing
 
     # OS images for TE analysis: list of dicts with keys "id", "revision", "name", "is_default", "enabled"
     os_images: List[dict] = field(default_factory=list)
@@ -97,7 +98,8 @@ class ScannerConfig:
     ssh_password: str = ""
     av_remote_directory: str = "/var/log/apiclient"
     av_rule_id: int = 1
-    av_te_threshold_mb: int = 100  # Files >= this (MB) skip TE, go to AV
+    te_to_av_fallback_at_mb: int = 100  # Files >= this (MB) skip TE, go to AV
+    av_to_signature_fallback_at_mb: int = 2048  # Files >= this (MB) skip AV, use MD5 signature check only
 
     # Health check configuration
     healthcheck_directory: Path = field(default_factory=lambda: Path("healthcheck"))
@@ -110,7 +112,7 @@ class ScannerConfig:
 
     def __post_init__(self):
         """Ensure integer fields loaded from config/env are actually ints."""
-        for attr in ("av_te_threshold_mb", "av_rule_id"):
+        for attr in ("te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb", "av_rule_id", "tex_max_file_size_mb"):
             current = getattr(self, attr)
             if not isinstance(current, int):
                 try:
@@ -193,6 +195,13 @@ class ScannerConfig:
             errors.append("ssh_password is required when av_fallback_enabled is true")
         if self.av_rule_id < 1:
             errors.append("av_rule_id must be at least 1")
+        if self.te_to_av_fallback_at_mb < 1:
+            errors.append("te_to_av_fallback_at_mb must be at least 1")
+        if self.av_to_signature_fallback_at_mb < self.te_to_av_fallback_at_mb:
+            errors.append(
+                f"av_to_signature_fallback_at_mb ({self.av_to_signature_fallback_at_mb} MB) "
+                f"must not be less than te_to_av_fallback_at_mb ({self.te_to_av_fallback_at_mb} MB)"
+            )
 
         return (len(errors) == 0, errors)
 
@@ -270,12 +279,14 @@ class ScannerConfig:
             "archive_extensions": set(),
             "save_response_info": True,
             "os_images": [],
-            "av_fallback_enabled": False,
+           "av_fallback_enabled": False,
             "ssh_username": "",
             "ssh_password": "",
             "av_remote_directory": "/var/log/apiclient",
             "av_rule_id": 1,
-            "av_te_threshold_mb": 100,
+            "te_to_av_fallback_at_mb": 100,
+            "av_to_signature_fallback_at_mb": 2048,
+            "tex_max_file_size_mb": 15,
             "healthcheck_directory": "healthcheck",
         }
 
@@ -385,6 +396,13 @@ class ScannerConfig:
                                 "yes",
                                 "on",
                             ]
+                        elif key == "tex_max_file_size_mb":
+                            try:
+                                config_data[key] = int(value)
+                            except ValueError:
+                                print(
+                                    f"Warning: Invalid integer value in config for {key}: {value}"
+                                )
                         else:
                             config_data[key] = value.strip()
 
@@ -507,7 +525,18 @@ class ScannerConfig:
             if "AV_FALLBACK" in parser:
                 section = parser["AV_FALLBACK"]
                 for key in section:
-                    if key in config_data and key not in parser.defaults():
+                    if key not in parser.defaults():
+                        # Handle deprecated key name
+                        if key == "av_te_threshold_mb":
+                            print(
+                                f"Warning: [AV_FALLBACK] key 'av_te_threshold_mb' is deprecated, "
+                                f"use 'te_to_av_fallback_at_mb' instead. "
+                                f"Using value {section[key]} for backward compatibility."
+                            )
+                            config_data["te_to_av_fallback_at_mb"] = section[key]
+                            continue
+                        if key not in config_data:
+                            continue
                         value = section[key]
                         if key == "av_fallback_enabled":
                             config_data[key] = value.lower() in [
@@ -516,7 +545,14 @@ class ScannerConfig:
                                 "yes",
                                 "on",
                             ]
-                        elif key == "av_rule_id":
+                        elif key in ("av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb"):
+                            try:
+                                config_data[key] = int(value)
+                            except ValueError:
+                                print(
+                                    f"Warning: Invalid integer value in config for {key}: {value}"
+                                )
+                        elif key == "tex_max_file_size_mb":
                             try:
                                 config_data[key] = int(value)
                             except ValueError:
@@ -581,20 +617,31 @@ class ScannerConfig:
                     config_data[key] = value
 
         # AV fallback env vars
-        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "av_te_threshold_mb"}
+        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb"}
         for key in _av_env_keys:
             env_key = env_prefix + key.upper()
             if env_key in os.environ:
                 value = os.environ[env_key]
                 if key == "av_fallback_enabled":
                     config_data[key] = value.lower() in ["true", "1", "yes", "on"]
-                elif key == "av_rule_id" or key == "av_te_threshold_mb":
+                elif key in ("av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb"):
                     try:
                         config_data[key] = int(value)
                     except ValueError:
                         print(f"Warning: Invalid integer value for {env_key}: {value}")
                 else:
                     config_data[key] = value
+
+        # TEX env vars
+        _tex_env_keys = {"tex_max_file_size_mb"}
+        for key in _tex_env_keys:
+            env_key = env_prefix + key.upper()
+            if env_key in os.environ:
+                value = os.environ[env_key]
+                try:
+                    config_data[key] = int(value)
+                except ValueError:
+                    print(f"Warning: Invalid integer value for {env_key}: {value}")
 
         # Health check env vars
         _hc_env_keys = {"healthcheck_directory"}
@@ -649,12 +696,14 @@ class ScannerConfig:
                 ("av_password", "ssh_password"),
                 ("av_remote_dir", "av_remote_directory"),
                 ("av_rule_id", "av_rule_id"),
-                ("av_te_threshold_mb", "av_te_threshold_mb"),
+                ("av_te_threshold_mb", "te_to_av_fallback_at_mb"),  # deprecated CLI name, maps to new key
+                ("av_to_signature_threshold_mb", "av_to_signature_fallback_at_mb"),
                 ("zip_archive_directory", "zip_archive_directory"),
                 ("tex_enabled", "tex_enabled"),
                 ("tex_url", "tex_url"),
                 ("tex_response_info_dir", "tex_response_info_directory"),
                 ("tex_clean_files_dir", "tex_clean_files_directory"),
+                ("tex_max_file_size_mb", "tex_max_file_size_mb"),
                 ("healthcheck_dir", "healthcheck_directory"),
             ]
             _int_cli_keys = {
@@ -666,7 +715,9 @@ class ScannerConfig:
                 "email_smtp_port",
                 "email_imap_port",
                 "av_rule_id",
-                "av_te_threshold_mb",
+                "te_to_av_fallback_at_mb",
+                "av_to_signature_fallback_at_mb",
+                "tex_max_file_size_mb",
             }
             for cli_attr, config_key in _cli_mappings:
                 val = getattr(cli_args, cli_attr, None)
@@ -835,6 +886,7 @@ class ScannerConfig:
             print(
                 f"  Scrubbed parts:        {len(self.tex_scrubbed_parts_codes)} enabled"
             )
+            print(f"  Max file size (MB):    {self.tex_max_file_size_mb}")
 
         # AV Fallback Configuration
         print("AV Fallback:")
@@ -844,7 +896,8 @@ class ScannerConfig:
             print(f"  SSH Password:          {'Set' if self.ssh_password else '(empty)'}")
             print(f"  Remote Directory:      {self.av_remote_directory}")
             print(f"  AV Rule ID:            {self.av_rule_id}")
-            print(f"  TE Threshold (MB):     {self.av_te_threshold_mb}")
+            print(f"  TE → AV Threshold:     {self.te_to_av_fallback_at_mb} MB")
+            print(f"  AV → Sig Threshold:    {self.av_to_signature_fallback_at_mb} MB")
 
         # Health Check Configuration
         print("Health Check:")

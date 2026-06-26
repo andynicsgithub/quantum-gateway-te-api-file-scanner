@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-logger_config.py v13.1 (alpha)
+logger_config.py v13.2 (alpha)
 Centralized logging configuration for TE API Scanner.
 
 Features:

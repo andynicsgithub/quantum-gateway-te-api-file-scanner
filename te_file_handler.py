@@ -434,6 +434,19 @@ class TE(object):
             )
             return None
 
+        # Check file size against TEX max limit
+        try:
+            file_size = self.full_path.stat().st_size
+            max_bytes = config.tex_max_file_size_mb * 1024 * 1024
+            if file_size >= max_bytes:
+                self.logger.info(
+                    f"Skipping TEX — file too large ({file_size:,} bytes >= {config.tex_max_file_size_mb} MB limit): {self.log_path}"
+                )
+                return None
+        except OSError as e:
+            self.logger.error(f"Cannot get file size for TEX check: {e}")
+            return None
+
         try:
             self._setup_tex_directories(config)
             self.logger.info(

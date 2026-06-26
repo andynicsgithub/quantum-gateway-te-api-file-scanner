@@ -22,7 +22,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from safe_filename import sanitize_for_remote
-from av_handler import AVHandler, AV_FILE_SIZE_LIMIT
+from av_handler import AVHandler
 from config_manager import ScannerConfig
 from te_api import TE_FILE_SIZE_LIMIT
 
@@ -280,13 +280,9 @@ Line 4
 class TestAVFileSizes:
     """Test AV file size threshold constants."""
 
-    def test_av_file_size_limit_is_2gb(self):
-        """AV_FILE_SIZE_LIMIT should be ~2 GB (2 * 10^9)."""
-        assert AV_FILE_SIZE_LIMIT == 2097152000  # 2 * 10^9
-
-    def test_av_limit_exceeds_te_limit(self):
-        """AV limit should exceed TE limit."""
-        assert AV_FILE_SIZE_LIMIT > TE_FILE_SIZE_LIMIT
+    def test_te_file_size_limit_is_100mb(self):
+        """TE_FILE_SIZE_LIMIT should be 100 MB (100 * 1024^2)."""
+        assert TE_FILE_SIZE_LIMIT == 104857600  # 100 * 1024^2
 
     def test_100mb_file_triggers_av(self):
         """100 MB file should be at the TE limit boundary."""
@@ -300,15 +296,14 @@ class TestAVFileSizes:
         """101 MB file should be above TE limit."""
         assert 101 * 1024 * 1024 >= TE_FILE_SIZE_LIMIT
 
-    def test_1_95gb_below_av_limit(self):
-        """1.95 GiB should be below the 2*10^9 byte AV limit."""
-        # 2 * 10^9 = 2097152000 bytes = ~1.95 GiB
-        # 1.9 GiB = 2042137600 bytes, clearly below limit
-        assert 1900 * 1024 * 1024 < AV_FILE_SIZE_LIMIT
+    def test_1_95gb_below_signature_threshold(self):
+        """1.95 GiB should be below the default 2048 MB AV-to-signature threshold."""
+        # 2048 MB = 2048 * 1024 * 1024 = 2147483648 bytes
+        assert 1900 * 1024 * 1024 < 2048 * 1024 * 1024
 
-    def test_2gb_plus_1mb_above_av_limit(self):
-        """2 GB + 1 MB file should exceed AV limit."""
-        assert 2 * 1024 * 1024 * 1024 + 1024 * 1024 > AV_FILE_SIZE_LIMIT
+    def test_2_1gb_above_signature_threshold(self):
+        """2.1 GB file should exceed the default 2048 MB AV-to-signature threshold."""
+        assert 2.1 * 1024 * 1024 * 1024 > 2048 * 1024 * 1024
 
 
 # ============================================================
@@ -349,12 +344,16 @@ class TestAVConfigLoading:
             ssh_password="testpass",
             av_remote_directory="/custom/path",
             av_rule_id=5,
+            te_to_av_fallback_at_mb=150,
+            av_to_signature_fallback_at_mb=3000,
         )
         assert config.av_fallback_enabled is True
         assert config.ssh_username == "testuser"
         assert config.ssh_password == "testpass"
         assert config.av_remote_directory == "/custom/path"
         assert config.av_rule_id == 5
+        assert config.te_to_av_fallback_at_mb == 150
+        assert config.av_to_signature_fallback_at_mb == 3000
 
     def test_av_rule_id_validation_rejects_zero(self):
         """av_rule_id must be >= 1."""
@@ -423,6 +422,8 @@ class TestAVConfigLoading:
         os.environ["TE_SSH_USERNAME"] = "envuser"
         os.environ["TE_SSH_PASSWORD"] = "envpass"
         os.environ["TE_AV_RULE_ID"] = "3"
+        os.environ["TE_TE_TO_AV_FALLBACK_AT_MB"] = "150"
+        os.environ["TE_AV_TO_SIGNATURE_FALLBACK_AT_MB"] = "3000"
 
         config = ScannerConfig.from_sources(config_file="config.ini")
 
@@ -430,12 +431,16 @@ class TestAVConfigLoading:
         assert config.ssh_username == "envuser"
         assert config.ssh_password == "envpass"
         assert config.av_rule_id == 3
+        assert config.te_to_av_fallback_at_mb == 150
+        assert config.av_to_signature_fallback_at_mb == 3000
 
         # Cleanup
         del os.environ["TE_AV_FALLBACK_ENABLED"]
         del os.environ["TE_SSH_USERNAME"]
         del os.environ["TE_SSH_PASSWORD"]
         del os.environ["TE_AV_RULE_ID"]
+        del os.environ["TE_TE_TO_AV_FALLBACK_AT_MB"]
+        del os.environ["TE_AV_TO_SIGNATURE_FALLBACK_AT_MB"]
 
     def test_env_var_av_remote_directory(self):
         """TE_AV_REMOTE_DIRECTORY env var should set config."""
@@ -465,6 +470,8 @@ ssh_username = inifileuser
 ssh_password = inifilepass
 av_remote_directory = /ini/path
 av_rule_id = 7
+te_to_av_fallback_at_mb = 150
+av_to_signature_fallback_at_mb = 3000
 """)
             ini_path = f.name
 
@@ -475,6 +482,8 @@ av_rule_id = 7
             assert config.ssh_password == "inifilepass"
             assert config.av_remote_directory == "/ini/path"
             assert config.av_rule_id == 7
+            assert config.te_to_av_fallback_at_mb == 150
+            assert config.av_to_signature_fallback_at_mb == 3000
         finally:
             os.unlink(ini_path)
 
@@ -503,3 +512,84 @@ av_rule_id = invalid
             assert config.av_rule_id == 1
         finally:
             os.unlink(ini_path)
+
+
+class TestSignatureThreshold:
+    """Test signature threshold config loading and validation."""
+
+    def test_signature_threshold_defaults(self):
+        """Signature threshold should default to 2048 MB."""
+        config = ScannerConfig(
+            input_directory=Path("/tmp/input"),
+            reports_directory=Path("/tmp/reports"),
+            benign_directory=Path("/tmp/benign"),
+            quarantine_directory=Path("/tmp/quarantine"),
+            error_directory=Path("/tmp/error"),
+            appliance_ip="127.0.0.1",
+        )
+        assert config.av_to_signature_fallback_at_mb == 2048
+
+    def test_tex_max_file_size_default(self):
+        """TEX max file size should default to 15 MB."""
+        config = ScannerConfig(
+            input_directory=Path("/tmp/input"),
+            reports_directory=Path("/tmp/reports"),
+            benign_directory=Path("/tmp/benign"),
+            quarantine_directory=Path("/tmp/quarantine"),
+            error_directory=Path("/tmp/error"),
+            appliance_ip="127.0.0.1",
+        )
+        assert config.tex_max_file_size_mb == 15
+
+    def test_av_threshold_validation_rejects_below_te(self):
+        """av_to_signature_fallback_at_mb must not be less than te_to_av_fallback_at_mb."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = ScannerConfig(
+                input_directory=Path(tmpdir),
+                reports_directory=Path(tmpdir),
+                benign_directory=Path(tmpdir),
+                quarantine_directory=Path(tmpdir),
+                error_directory=Path(tmpdir),
+                appliance_ip="127.0.0.1",
+                te_to_av_fallback_at_mb=200,
+                av_to_signature_fallback_at_mb=100,
+            )
+            is_valid, errors = config.validate()
+            assert not is_valid
+            assert any("av_to_signature_fallback_at_mb" in e for e in errors)
+
+    def test_av_threshold_validation_accepts_equal(self):
+        """av_to_signature_fallback_at_mb can equal te_to_av_fallback_at_mb."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = ScannerConfig(
+                input_directory=Path(tmpdir),
+                reports_directory=Path(tmpdir),
+                benign_directory=Path(tmpdir),
+                quarantine_directory=Path(tmpdir),
+                error_directory=Path(tmpdir),
+                appliance_ip="127.0.0.1",
+                te_to_av_fallback_at_mb=100,
+                av_to_signature_fallback_at_mb=100,
+            )
+            is_valid, errors = config.validate()
+            assert is_valid
+
+    def test_deprecated_av_te_threshold_mb_warns(self):
+        """Old av_te_threshold_mb key should trigger deprecation warning."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ini_path = os.path.join(tmpdir, "test.ini")
+            with open(ini_path, "w") as f:
+                f.write(f"""[DEFAULT]
+input_directory = {tmpdir}
+reports_directory = {tmpdir}
+benign_directory = {tmpdir}
+quarantine_directory = {tmpdir}
+error_directory = {tmpdir}
+appliance_ip = 127.0.0.1
+
+[AV_FALLBACK]
+av_fallback_enabled = false
+av_te_threshold_mb = 150
+""")
+            config = ScannerConfig.from_sources(config_file=ini_path)
+            assert config.te_to_av_fallback_at_mb == 150

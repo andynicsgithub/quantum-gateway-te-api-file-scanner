@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-file_watcher.py v13.1 (alpha)
+file_watcher.py v13.2 (alpha)
 Cross-platform file watcher for TE API Scanner using watchdog.
 Features:
   - Detects file completion using three-tier monitoring (created, modified, closed)
@@ -23,8 +23,11 @@ from safe_filename import sanitize_filename
 from te_api import (
     process_single_file,
     get_te_threshold_bytes,
+    get_av_signature_threshold_bytes,
+    query_av_signature,
 )
 from path_handler import PathHandler
+import hashlib
 
 
 class CopyCompletionWatcher(FileSystemEventHandler):
@@ -393,9 +396,10 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
         # Shared collision-tracking dict for sanitize_filename
         seen = {}
 
-        # Phase 1: Discover and categorize files (TE vs AV fallback)
+        # Phase 1: Discover and categorize files (TE vs AV fallback vs signature)
         te_files = []
         av_files = []
+        signature_files = []
 
         for file_path in file_paths:
             if not os.path.exists(file_path):
@@ -417,13 +421,20 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                 except OSError:
                     file_size = 0
 
-                if file_size >= get_te_threshold_bytes(config):
+                if file_size >= get_av_signature_threshold_bytes(config):
+                    signature_files.append((file_path, file_name, safe_file_name, sub_dir, full_path, file_size))
+                elif file_size >= get_te_threshold_bytes(config):
                     av_files.append((file_path, file_name, safe_file_name, sub_dir, full_path, file_size))
                 else:
                     te_files.append((file_path, file_name, safe_file_name, sub_dir, full_path))
             except Exception as e:
                 batch_logger.error(f"Error categorizing {file_path}: {e}")
                 continue
+
+        if signature_files:
+            batch_logger.info(
+                f"Found {len(signature_files)} files above AV-to-signature threshold ({config.av_to_signature_fallback_at_mb} MB) -> will use MD5 signature check"
+            )
 
         # Phase 2: Process TE files concurrently via ThreadPoolExecutor
         if te_files:
@@ -506,10 +517,10 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                         f"AV transfer failed for {display_path} — "
                         "file stays in input"
                     )
-                elif av_verdict == "Skipped_Above_AV_Limit":
+                elif av_verdict == "Above_AV_To_Signature_Threshold":
                     batch_logger.warning(
                         f"AV skipped for {display_path} "
-                        f"({file_size / (1024*1024*1024):.1f} GB > 2 GB limit)"
+                        f"({file_size / (1024*1024):.1f} MB > {config.av_to_signature_fallback_at_mb} MB threshold, use MD5 signature check)"
                     )
                 elif verdict == "Malicious":
                     batch_logger.warning(
@@ -586,6 +597,95 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
             elif verdict == "Benign":
                 batch_summary["benign"] += 1
             elif verdict == "Error":
+                batch_summary["error"] += 1
+
+        # Phase 4: Process signature check files sequentially (MD5 API query)
+        sig_benign = 0
+        sig_malicious = 0
+        sig_error = 0
+        sig_files_processed = 0
+
+        for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in signature_files:
+            display_path = PathHandler.display_path(file_name, sub_dir)
+            batch_logger.info(
+                f"Large file detected: {display_path} ({file_size / (1024*1024):.1f} MB) -> MD5 signature check"
+            )
+
+            try:
+                # Compute MD5 hash
+                md5_hash = hashlib.md5()
+                with open(str(full_path), "rb") as f:
+                    for chunk in iter(lambda: f.read(8192), b""):
+                        md5_hash.update(chunk)
+                md5_hex = md5_hash.hexdigest()
+            except OSError as e:
+                batch_logger.error(f"Cannot compute MD5 for {file_name}: {e}")
+                result = {
+                    "name": file_name,
+                    "path": sub_dir if sub_dir else "",
+                    "verdict": "Error",
+                    "status": "error",
+                    "tex_status": None,
+                    "av_verdict": "MD5_Compute_Failed",
+                    "error_detail": str(e),
+                }
+                _move_to_error_in_watch(file_name, sub_dir, full_path, config, batch_logger)
+                sig_error += 1
+                sig_files_processed += 1
+                batch_summary["all_files"].append(result)
+                batch_summary["processed"] += 1
+                batch_summary["error"] += 1
+                continue
+
+            # Query AV signature API
+            verdict = query_av_signature(config, md5_hex)
+
+            if verdict == "Malicious":
+                dest = config.quarantine_directory / sub_dir / file_name
+                action = "quarantine"
+            elif verdict == "Benign":
+                dest = config.benign_directory / sub_dir / file_name
+                action = "benign"
+            else:
+                dest = config.error_directory / sub_dir / file_name
+                action = "error"
+
+            # Add file to batch zip archive before moving
+            if batch_zip_mgr:
+                try:
+                    batch_zip_mgr.add_file(full_path, action, sub_dir, file_name)
+                except Exception as e:
+                    batch_logger.warning(f"Failed to add {file_name} to zip: {e}")
+
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                PathHandler.safe_move(Path(full_path), dest)
+                batch_logger.info(f"Signature {action}: moved {file_name} to {action} directory")
+            except Exception as e:
+                batch_logger.error(f"Signature: failed to move {file_name} to {action}: {e}")
+
+            result = {
+                "name": file_name,
+                "path": sub_dir if sub_dir else "",
+                "verdict": verdict,
+                "status": "success" if verdict in ("Benign", "Malicious") else "error",
+                "tex_status": None,
+                "av_verdict": f"MD5_{verdict}",
+            }
+
+            sig_files_processed += 1
+            batch_summary["all_files"].append(result)
+            batch_summary["processed"] += 1
+
+            if verdict == "Malicious":
+                sig_malicious += 1
+                batch_summary["malicious"] += 1
+                batch_summary["malicious_files"].append({"name": file_name, "verdict": verdict})
+            elif verdict == "Benign":
+                sig_benign += 1
+                batch_summary["benign"] += 1
+            else:
+                sig_error += 1
                 batch_summary["error"] += 1
 
         # Close zip archive for this batch

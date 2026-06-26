@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-av_handler.py v13.1 (alpha)
+av_handler.py v13.2 (alpha)
 Antivirus (AV) fallback handler for files too large for TE or unsupported by TE.
 
 Uses SCP (via SFTP) to transfer files to the TE appliance and SSH to trigger
@@ -19,8 +19,7 @@ from typing import Optional
 
 logger = logging.getLogger("te_scanner.main")
 
-# AV file size limits
-AV_FILE_SIZE_LIMIT = 2097152000  # ~2 GB — files >= this are skipped entirely
+# AV file size limits — removed hardcoded limit, now uses config.av_to_signature_fallback_at_mb
 
 
 class AVHandler:
@@ -359,11 +358,12 @@ class AVHandler:
                 "av_verdict": "Error",
             }
 
-        # Check AV size limit
-        if file_size >= AV_FILE_SIZE_LIMIT:
+       # Check file size against AV threshold (should already be filtered by discover_files, but safeguard)
+        if file_size >= config.av_to_signature_fallback_at_mb * 1024 * 1024:
             logger.warning(
-                f"File {file_name} ({file_size / (1024*1024*1024):.1f} GB) "
-                f"exceeds AV limit (~2 GB). Skipping."
+                f"File {file_name} ({file_size / (1024*1024):.1f} MB) "
+                f"exceeds AV-to-signature threshold ({config.av_to_signature_fallback_at_mb} MB). "
+                f"Should have been routed to signature check."
             )
             return {
                 "name": file_name,
@@ -371,7 +371,7 @@ class AVHandler:
                 "verdict": "Error",
                 "status": "error",
                 "tex_status": None,
-                "av_verdict": "Skipped_Above_AV_Limit",
+                "av_verdict": "Above_AV_To_Signature_Threshold",
             }
 
         # Get safe remote filename
