@@ -891,7 +891,7 @@ def process_discovered_files(
 
             logger.info(
                 f"MD5 signature check for {file_name} ({md5_hex}, "
-                f"{full_path.stat().st_size:,} bytes)"
+                f"{Path(full_path).stat().st_size:,} bytes)"
             )
 
             # Query AV signature API

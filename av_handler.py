@@ -46,6 +46,7 @@ class AVHandler:
         self.ssh_password = config.ssh_password
         self.av_remote_directory = config.av_remote_directory
         self.av_rule_id = config.av_rule_id if config.av_rule_id >= 1 else 1
+        self.av_to_signature_fallback_at_mb = config.av_to_signature_fallback_at_mb
         self._ssh_client = None
         self._sftp = None
         self._connected = False
@@ -359,10 +360,10 @@ class AVHandler:
             }
 
        # Check file size against AV threshold (should already be filtered by discover_files, but safeguard)
-        if file_size >= config.av_to_signature_fallback_at_mb * 1024 * 1024:
+        if file_size >= self.av_to_signature_fallback_at_mb * 1024 * 1024:
             logger.warning(
                 f"File {file_name} ({file_size / (1024*1024):.1f} MB) "
-                f"exceeds AV-to-signature threshold ({config.av_to_signature_fallback_at_mb} MB). "
+                f"exceeds AV-to-signature threshold ({self.av_to_signature_fallback_at_mb} MB). "
                 f"Should have been routed to signature check."
             )
             return {
