@@ -230,6 +230,37 @@ class CopyCompletionWatcher(FileSystemEventHandler):
 
         # Process stale files outside the lock (callback may be slow)
         self.logger.info(f"[WATCHER] {len(file_paths)} files ready for processing")
+
+        # Pre-processing stability check: wait a couple more seconds to let
+        # large files finish their last write operation. Windows file systems
+        # can have brief write gaps where the size appears stable, then the
+        # file resumes writing (especially with large files copied over SMB).
+        stability_check_attempts = 0
+        stability_check_max = 10  # max ~10 seconds total
+        while stability_check_attempts < stability_check_max:
+            any_modified = False
+            for path in file_paths:
+                try:
+                    stat = os.stat(path)
+                    if stat.st_mtime > now - 2:  # modified in last 2 seconds
+                        any_modified = True
+                        break
+                except OSError:
+                    pass
+            if not any_modified:
+                break
+            stability_check_attempts += 1
+            self.logger.info(
+                f"[WATCHER] Pre-processing stability check: "
+                f"waiting for files to settle (attempt {stability_check_attempts})..."
+            )
+            time.sleep(1)
+
+        if stability_check_attempts > 0:
+            self.logger.info(
+                f"[WATCHER] Files settled after {stability_check_attempts} stability check(s)"
+            )
+
         self.logger.info(
             f"[WATCHER] Triggering batch processing: {len(file_paths)} files"
         )
