@@ -786,6 +786,11 @@ def process_discovered_files(
         logger.info(f"Processing {len(archive_files)} archive files sequentially")
         for file_info in archive_files:
             file_name, safe_file_name, sub_dir, full_path = file_info
+            try:
+                file_size = Path(full_path).stat().st_size
+                logger.info(f"Processing: {file_name} ({file_size / (1024*1024):.1f} MB)")
+            except OSError:
+                logger.info(f"Processing: {file_name}")
             result = process_files(
                 file_name,
                 safe_file_name,
@@ -889,9 +894,10 @@ def process_discovered_files(
                 })
                 continue
 
+            file_size = Path(full_path).stat().st_size
             logger.info(
                 f"MD5 signature check for {file_name} ({md5_hex}, "
-                f"{Path(full_path).stat().st_size:,} bytes)"
+                f"{file_size:,} bytes, {file_size / (1024*1024):.1f} MB)"
             )
 
             # Query AV signature API

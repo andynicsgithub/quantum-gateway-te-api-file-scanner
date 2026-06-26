@@ -426,7 +426,7 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
                 elif file_size >= get_te_threshold_bytes(config):
                     av_files.append((file_path, file_name, safe_file_name, sub_dir, full_path, file_size))
                 else:
-                    te_files.append((file_path, file_name, safe_file_name, sub_dir, full_path))
+                    te_files.append((file_path, file_name, safe_file_name, sub_dir, full_path, file_size))
             except Exception as e:
                 batch_logger.error(f"Error categorizing {file_path}: {e}")
                 continue
@@ -443,8 +443,11 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
             )
             with ThreadPoolExecutor(max_workers=config.concurrency) as pool:
                 futures = {}
-                for file_path, file_name, safe_file_name, sub_dir, full_path in te_files:
-                    batch_logger.info(f"Processing: {PathHandler.display_path(file_name, sub_dir)}")
+                for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in te_files:
+                    batch_logger.info(
+                        f"Processing: {PathHandler.display_path(file_name, sub_dir)} "
+                        f"({file_size / (1024*1024):.1f} MB)"
+                    )
                     future = pool.submit(
                         process_single_file,
                         file_name, safe_file_name, sub_dir, full_path,
@@ -605,10 +608,10 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
         sig_error = 0
         sig_files_processed = 0
 
-        for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in signature_files:
+          for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in signature_files:
             display_path = PathHandler.display_path(file_name, sub_dir)
             batch_logger.info(
-                f"Large file detected: {display_path} ({file_size / (1024*1024):.1f} MB) -> MD5 signature check"
+                f"MD5 signature check: {display_path} ({file_size / (1024*1024):.1f} MB)"
             )
 
             try:
