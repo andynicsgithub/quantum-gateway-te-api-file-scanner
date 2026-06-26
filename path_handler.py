@@ -329,6 +329,45 @@ class PathHandler:
             return False
 
     @staticmethod
+    def get_verdict_basename(directory: Path) -> str:
+        """
+        Get a safe name for a directory to use as a ZIP internal path prefix.
+
+        On Windows, pathlib.Path.name can return an empty string for UNC paths
+        (e.g. \\server\share) when the path has no subdirectory components.
+        This helper detects UNC paths and uses PureWindowsPath.parts to extract
+        the last meaningful component, skipping the UNC root part (\\server\).
+
+        Args:
+            directory: Path object for a verdict directory (benign/quarantine/error)
+
+        Returns:
+            Safe basename string for use in zip archive paths
+        """
+        try:
+            from pathlib import PureWindowsPath
+
+            if PathHandler.is_windows():
+                path_str = str(directory)
+                if path_str.startswith("\\\\"):
+                    # Windows UNC path detected
+                    win_path = PureWindowsPath(path_str)
+                    parts = win_path.parts
+                    # UNC parts: ('\\\\server\\', 'share', 'dir', ...) -> skip first
+                    meaningful = parts[1:] if len(parts) > 1 else parts
+                    if meaningful:
+                        return meaningful[-1]
+                    # UNC root with no subdirs (e.g. \\server\share) -> extract share name
+                    remainder = path_str[2:]  # strip leading \\
+                    parts = remainder.split("\\")
+                    if len(parts) >= 2:
+                        return parts[1]  # index 0 = server, index 1 = share
+                    return path_str
+        except Exception:
+            pass
+        return directory.name
+
+    @staticmethod
     def display_path(file_name: str, sub_dir: str) -> str:
         """
         Return a display-friendly path for logging purposes.

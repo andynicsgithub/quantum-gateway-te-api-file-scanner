@@ -41,7 +41,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions={"zip", "rar"},
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(archives) == 0
             assert len(others) == 2
         finally:
@@ -66,7 +66,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions={"zip", "rar", "7z"},
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(archives) == 2
             assert len(others) == 1
         finally:
@@ -89,7 +89,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions=set(),
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(others) == 1
             file_tuple = list(others)[0]
             assert len(file_tuple) == 4
@@ -112,7 +112,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions=set(),
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(archives) == 0
             assert len(others) == 0
         finally:
@@ -136,7 +136,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions=set(),  # no archive extensions
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(archives) == 0
             assert len(others) == 2
         finally:
@@ -159,7 +159,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions=set(),
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(others) == 1
             file_tuple = list(others)[0]
             assert file_tuple[2] == "subdir1"  # sub_dir
@@ -183,7 +183,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions=set(),
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(others) == 1
             file_tuple = list(others)[0]
             assert file_tuple[2] == "subdir1/subdir2"
@@ -209,7 +209,7 @@ class TestDiscoverFiles:
                 appliance_ip="10.0.0.1",
                 archive_extensions={"zip"},
             )
-            archives, others, av_files = discover_files(input_dir, config)
+            archives, others, av_files, signature_files = discover_files(input_dir, config)
             assert len(archives) == 3
         finally:
             import shutil

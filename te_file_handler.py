@@ -665,7 +665,7 @@ class TE(object):
 
         # Handle Error verdict regardless of status - always zip and move to error
         if verdict == "Error":
-            basename = self.error_directory.name
+            basename = PathHandler.get_verdict_basename(self.error_directory)
             self.logger.debug(
                 f"{self.log_path} - [ZIP] Error verdict (status={self.final_status_label}): basename={basename!r}"
             )
@@ -675,6 +675,15 @@ class TE(object):
                 f"{self.log_path} - TE Error verdict (status={status_label}). "
                 f"Response: {json.dumps(self.final_response, indent=2, default=str)[:2000]}"
             )
+            # Retry via AV if enabled
+            if (self.config.te_error_fallback_to_av
+                    and self.config.av_fallback_enabled
+                    and self.config.av_remote_directory):
+                self.logger.info(
+                    f"{self.log_path} - TE Error verdict, retrying via AV fallback"
+                )
+                self.handle_av_fallback_for_error()
+                return
             self._add_to_zip(basename)
             self.move_file(self.error_directory)
         elif self.final_status_label in ("FOUND", "PARTIALLY_FOUND"):
@@ -688,7 +697,7 @@ class TE(object):
             # (parse + download report). The explicit form is clearer than
             # adding indirection for marginal DRY gain.
             if verdict == "Malicious":
-                basename = self.quarantine_directory.name
+                basename = PathHandler.get_verdict_basename(self.quarantine_directory)
                 self.logger.debug(
                     f"{self.log_path} - [ZIP] Malicious: basename={basename!r}"
                 )
@@ -698,7 +707,7 @@ class TE(object):
                 if self.report_id != "":
                     self.download_report()
             elif verdict == "Benign":
-                basename = self.benign_directory.name
+                basename = PathHandler.get_verdict_basename(self.benign_directory)
                 self.logger.debug(
                     f"{self.log_path} - [ZIP] Benign: basename={basename!r}"
                 )
@@ -707,7 +716,7 @@ class TE(object):
             else:
                 # PARTIALLY_FOUND or other status where no verdict was determined
                 # (e.g., verdict is "Error" but status is FOUND/PARTIALLY_FOUND)
-                basename = self.error_directory.name
+                basename = PathHandler.get_verdict_basename(self.error_directory)
                 self.logger.warning(
                     f"{self.log_path} - Status={self.final_status_label} but verdict={verdict} "
                     f"(not Benign/Malicious). Moving to error directory."
@@ -751,7 +760,7 @@ class TE(object):
                         self.final_response = response_j
                         verdict = self.parse_verdict(response_j, "te")
                         if verdict == "Malicious":
-                            basename = self.quarantine_directory.name
+                            basename = PathHandler.get_verdict_basename(self.quarantine_directory)
                             self.logger.debug(
                                 f"{self.log_path} - [ZIP] Malicious: basename={basename!r}"
                             )
@@ -761,7 +770,7 @@ class TE(object):
                             if self.report_id != "":
                                 self.download_report()
                         elif verdict == "Benign":
-                            basename = self.benign_directory.name
+                            basename = PathHandler.get_verdict_basename(self.benign_directory)
                             self.logger.debug(
                                 f"{self.log_path} - [ZIP] Benign: basename={basename!r}"
                             )
@@ -769,14 +778,14 @@ class TE(object):
                             self.move_file(self.benign_directory)
                         elif verdict == "Unknown":
                             # Even final status has no verdict — error
-                            basename = self.error_directory.name
+                            basename = PathHandler.get_verdict_basename(self.error_directory)
                             self.logger.warning(
                                 f"{self.log_path} - Final status={new_status} but no verdict, moving to error"
                             )
                             self._add_to_zip(basename)
                             self.move_file(self.error_directory)
                         else:
-                            basename = self.error_directory.name
+                            basename = PathHandler.get_verdict_basename(self.error_directory)
                             self._add_to_zip(basename)
                             self.move_file(self.error_directory)
                         return
@@ -789,7 +798,7 @@ class TE(object):
                 f"{self.log_path} - Timed out waiting for TE verdict after "
                 f"{query_wait}s, moving to error directory."
             )
-            basename = self.error_directory.name
+            basename = PathHandler.get_verdict_basename(self.error_directory)
             self._add_to_zip(basename)
             self.move_file(self.error_directory)
 
@@ -873,6 +882,60 @@ class TE(object):
             self.logger.error(
                 f"Failed to copy {self.log_path} to temp for zip: {e}", exc_info=True
             )
+
+    def handle_av_fallback_for_error(self):
+        """Retry file via AV when TE returns Error verdict.
+
+        Uses the same AV flow as av_handler.py but called from within
+        the TE handler so it has access to zip_config and directories.
+
+        Only called when config.te_error_fallback_to_av is True and
+        av_fallback_enabled is True.
+        """
+        try:
+            from av_handler import AVHandler
+        except ImportError as e:
+            self.logger.error(
+                f"{self.log_path} - AV fallback enabled but paramiko not installed: {e}"
+            )
+            basename = PathHandler.get_verdict_basename(self.error_directory)
+            self._add_to_zip(basename)
+            self.move_file(self.error_directory)
+            return
+
+        with AVHandler(self.config) as av:
+            result = av.process_file(
+                self.file_name,
+                self.safe_file_name,
+                self.sub_dir,
+                str(self.full_path),
+                self.zip_config,
+            )
+
+        verdict = result.get("verdict", "Error")
+        av_verdict = result.get("av_verdict", "")
+
+        if av_verdict == "Transfer_Failed":
+            self.logger.error(
+                f"{self.log_path} - AV transfer failed, file stays in input"
+            )
+            return
+
+        self.logger.info(f"{self.log_path} - AV fallback verdict: {verdict}")
+
+        # Determine verdict directory and basename
+        if verdict == "Malicious":
+            target_dir = self.quarantine_directory
+            basename = PathHandler.get_verdict_basename(self.quarantine_directory)
+        elif verdict == "Benign":
+            target_dir = self.benign_directory
+            basename = PathHandler.get_verdict_basename(self.benign_directory)
+        else:
+            target_dir = self.error_directory
+            basename = PathHandler.get_verdict_basename(self.error_directory)
+
+        self._add_to_zip(basename)
+        self.move_file(target_dir)
 
     def move_file(self, destination_directory):
         """

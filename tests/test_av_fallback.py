@@ -593,3 +593,137 @@ av_te_threshold_mb = 150
 """)
             config = ScannerConfig.from_sources(config_file=ini_path)
             assert config.te_to_av_fallback_at_mb == 150
+
+
+# ============================================================
+# TE Error Fallback Config Tests
+# ============================================================
+
+
+class TestTEErrorFallbackConfig:
+    """Tests for the te_error_fallback_to_av config option."""
+
+    def test_te_error_fallback_default_false(self):
+        """te_error_fallback_to_av should default to False."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = ScannerConfig(
+                input_directory=Path(tmpdir),
+                reports_directory=Path(tmpdir),
+                benign_directory=Path(tmpdir),
+                quarantine_directory=Path(tmpdir),
+                error_directory=Path(tmpdir),
+                appliance_ip="127.0.0.1",
+            )
+            assert config.te_error_fallback_to_av is False
+
+    def test_te_error_fallback_config_true(self):
+        """te_error_fallback_to_av can be set to True."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = ScannerConfig(
+                input_directory=Path(tmpdir),
+                reports_directory=Path(tmpdir),
+                benign_directory=Path(tmpdir),
+                quarantine_directory=Path(tmpdir),
+                error_directory=Path(tmpdir),
+                appliance_ip="127.0.0.1",
+                te_error_fallback_to_av=True,
+            )
+            assert config.te_error_fallback_to_av is True
+
+    def test_te_error_fallback_env_var(self):
+        """TE_TE_ERROR_FALLBACK_TO_AV env var should set the config."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ini_path = os.path.join(tmpdir, "test.ini")
+            with open(ini_path, "w") as f:
+                f.write(f"""[DEFAULT]
+input_directory = {tmpdir}
+reports_directory = {tmpdir}
+benign_directory = {tmpdir}
+quarantine_directory = {tmpdir}
+error_directory = {tmpdir}
+appliance_ip = 127.0.0.1
+""")
+            os.environ["TE_TE_ERROR_FALLBACK_TO_AV"] = "true"
+            try:
+                config = ScannerConfig.from_sources(config_file=ini_path)
+                assert config.te_error_fallback_to_av is True
+            finally:
+                os.environ.pop("TE_TE_ERROR_FALLBACK_TO_AV", None)
+
+    def test_te_error_fallback_config_file(self):
+        """te_error_fallback_to_av should load from config file."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ini_path = os.path.join(tmpdir, "test.ini")
+            with open(ini_path, "w") as f:
+                f.write(f"""[DEFAULT]
+input_directory = {tmpdir}
+reports_directory = {tmpdir}
+benign_directory = {tmpdir}
+quarantine_directory = {tmpdir}
+error_directory = {tmpdir}
+appliance_ip = 127.0.0.1
+
+[AV_FALLBACK]
+te_error_fallback_to_av = true
+""")
+            config = ScannerConfig.from_sources(config_file=ini_path)
+            assert config.te_error_fallback_to_av is True
+
+
+# ============================================================
+# UNC Basename Fix Tests
+# ============================================================
+
+
+class TestGetVerdictBasename:
+    """Tests for PathHandler.get_verdict_basename() UNC path handling."""
+
+    def test_local_path_returns_name(self):
+        """Local paths should return the directory name."""
+        from path_handler import PathHandler
+        result = PathHandler.get_verdict_basename(Path("/var/benign"))
+        assert result == "benign"
+
+    def test_local_path_with_trailing_slash(self):
+        """Local paths with trailing slash should return the directory name."""
+        from path_handler import PathHandler
+        result = PathHandler.get_verdict_basename(Path("/var/benign/"))
+        assert result == "benign"
+
+    def test_windows_unc_path_returns_share(self):
+        """Windows UNC paths should extract the share name (Windows only)."""
+        import sys
+        from path_handler import PathHandler
+        if sys.platform != "win32":
+            import pytest
+            pytest.skip("UNC path handling is Windows-only")
+        result = PathHandler.get_verdict_basename(Path("\\\\10.1.48.39\\fileshare"))
+        assert result == "fileshare"
+
+    def test_windows_unc_path_with_subdir(self):
+        """Windows UNC paths with subdirs should get the last meaningful component (Windows only)."""
+        import sys
+        from path_handler import PathHandler
+        if sys.platform != "win32":
+            import pytest
+            pytest.skip("UNC path handling is Windows-only")
+        result = PathHandler.get_verdict_basename(Path("\\\\10.1.48.39\\fileshare\\subdir"))
+        assert result == "subdir"
+
+    def test_windows_unc_path_with_trailing_slash(self):
+        """Windows UNC paths with trailing slash should extract the share name (Windows only)."""
+        import sys
+        from path_handler import PathHandler
+        if sys.platform != "win32":
+            import pytest
+            pytest.skip("UNC path handling is Windows-only")
+        result = PathHandler.get_verdict_basename(Path("\\\\10.1.48.39\\fileshare\\"))
+        assert result == "fileshare"
+
+    def test_get_verdict_basename_local_paths(self):
+        """Verify local path basenames work correctly on all platforms."""
+        from path_handler import PathHandler
+        # These should always work regardless of platform
+        assert PathHandler.get_verdict_basename(Path("/var/benign")) == "benign"
+        assert PathHandler.get_verdict_basename(Path("/var/quarantine")) == "quarantine"
+        assert PathHandler.get_verdict_basename(Path("/var/error")) == "error"

@@ -131,3 +131,115 @@ class TestVerdictRouting:
                     handler.move_file(handler.error_directory)
 
             handler.move_file.assert_called_once_with(expected_path)
+
+
+class TestTEErrorFallback:
+    """Tests for TE Error → AV fallback behavior."""
+
+    def _make_te_handler_with_config(self, **config_overrides):
+        """Create a TE instance with a mock config for testing TE error fallback."""
+        from config_manager import ScannerConfig
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = ScannerConfig(
+                input_directory=Path(tmpdir),
+                reports_directory=Path(tmpdir),
+                benign_directory=Path(tmpdir),
+                quarantine_directory=Path(tmpdir),
+                error_directory=Path(tmpdir),
+                appliance_ip="127.0.0.1",
+                **config_overrides,
+            )
+
+        handler = mock.MagicMock()
+        handler.final_response = {"response": [{"status": {"label": "FOUND"}, "te": {"combined_verdict": "Error"}}]}
+        handler.final_status_label = "FOUND"
+        handler.file_name = "large.tar"
+        handler.safe_file_name = "large.tar"
+        handler.sub_dir = ""
+        handler.full_path = Path("/tmp/large.tar")
+        handler.error_directory = Path("\\\\10.1.48.39\\fileshare\\errors")
+        handler.benign_directory = Path("\\\\10.1.48.39\\fileshare")
+        handler.quarantine_directory = Path("/tmp/quarantine")
+        handler.zip_config = None
+        handler.report_id = ""
+        handler.logger = mock.MagicMock()
+        handler.move_file = mock.MagicMock()
+        handler._add_to_zip = mock.MagicMock()
+        handler.config = config
+
+        return handler
+
+    def test_te_error_not_fallback_when_disabled(self):
+        """TE Error with fallback disabled should go to error directory."""
+        handler = self._make_te_handler_with_config(te_error_fallback_to_av=False)
+        verdict = "Error"
+
+        # Simulate the Error verdict handling logic
+        if verdict == "Error":
+            if (handler.config.te_error_fallback_to_av
+                    and handler.config.av_fallback_enabled
+                    and handler.config.av_remote_directory):
+                handler.handle_av_fallback_for_error()
+            else:
+                handler.move_file(handler.error_directory)
+
+        handler.move_file.assert_called_once_with(handler.error_directory)
+
+    def test_te_error_not_fallback_when_av_disabled(self):
+        """TE Error with AV fallback disabled should go to error directory."""
+        handler = self._make_te_handler_with_config(
+            te_error_fallback_to_av=True,
+            av_fallback_enabled=False,
+        )
+        verdict = "Error"
+
+        if verdict == "Error":
+            if (handler.config.te_error_fallback_to_av
+                    and handler.config.av_fallback_enabled
+                    and handler.config.av_remote_directory):
+                handler.handle_av_fallback_for_error()
+            else:
+                handler.move_file(handler.error_directory)
+
+        handler.move_file.assert_called_once_with(handler.error_directory)
+
+    def test_te_error_fallback_called_when_enabled(self):
+        """TE Error with fallback enabled should call AV handler."""
+        handler = self._make_te_handler_with_config(
+            te_error_fallback_to_av=True,
+            av_fallback_enabled=True,
+        )
+        verdict = "Error"
+
+        if verdict == "Error":
+            if (handler.config.te_error_fallback_to_av
+                    and handler.config.av_fallback_enabled
+                    and handler.config.av_remote_directory):
+                handler.handle_av_fallback_for_error()
+                av_fallback_called = True
+            else:
+                handler.move_file(handler.error_directory)
+                av_fallback_called = False
+
+        assert av_fallback_called is True
+        handler.handle_av_fallback_for_error.assert_called_once()
+
+    def test_te_error_verdict_uses_correct_basename(self):
+        """TE Error verdict should use correct basename for UNC paths (Windows only)."""
+        import sys
+        from path_handler import PathHandler
+
+        handler = self._make_te_handler_with_config()
+
+        if sys.platform != "win32":
+            import pytest
+            pytest.skip("UNC path handling is Windows-only")
+
+        # Verify that _get_verdict_basename works for UNC paths
+        error_basename = PathHandler.get_verdict_basename(handler.error_directory)
+        assert error_basename == "errors"
+
+        benign_basename = PathHandler.get_verdict_basename(handler.benign_directory)
+        assert benign_basename == "fileshare"

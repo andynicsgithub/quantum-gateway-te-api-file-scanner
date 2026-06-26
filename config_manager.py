@@ -100,6 +100,7 @@ class ScannerConfig:
     av_rule_id: int = 1
     te_to_av_fallback_at_mb: int = 100  # Files >= this (MB) skip TE, go to AV
     av_to_signature_fallback_at_mb: int = 2048  # Files >= this (MB) skip AV, use MD5 signature check only
+    te_error_fallback_to_av: bool = False  # Retry TE Error verdicts via AV path
 
     # Health check configuration
     healthcheck_directory: Path = field(default_factory=lambda: Path("healthcheck"))
@@ -286,6 +287,7 @@ class ScannerConfig:
             "av_rule_id": 1,
             "te_to_av_fallback_at_mb": 100,
             "av_to_signature_fallback_at_mb": 2048,
+            "te_error_fallback_to_av": False,
             "tex_max_file_size_mb": 15,
             "healthcheck_directory": "healthcheck",
         }
@@ -545,6 +547,13 @@ class ScannerConfig:
                                 "yes",
                                 "on",
                             ]
+                        elif key == "te_error_fallback_to_av":
+                            config_data[key] = value.lower() in [
+                                "true",
+                                "1",
+                                "yes",
+                                "on",
+                            ]
                         elif key in ("av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb"):
                             try:
                                 config_data[key] = int(value)
@@ -617,12 +626,14 @@ class ScannerConfig:
                     config_data[key] = value
 
         # AV fallback env vars
-        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb"}
+        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb", "te_error_fallback_to_av"}
         for key in _av_env_keys:
             env_key = env_prefix + key.upper()
             if env_key in os.environ:
                 value = os.environ[env_key]
                 if key == "av_fallback_enabled":
+                    config_data[key] = value.lower() in ["true", "1", "yes", "on"]
+                elif key == "te_error_fallback_to_av":
                     config_data[key] = value.lower() in ["true", "1", "yes", "on"]
                 elif key in ("av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb"):
                     try:
@@ -698,6 +709,7 @@ class ScannerConfig:
                 ("av_rule_id", "av_rule_id"),
                 ("av_te_threshold_mb", "te_to_av_fallback_at_mb"),  # deprecated CLI name, maps to new key
                 ("av_to_signature_threshold_mb", "av_to_signature_fallback_at_mb"),
+                ("te_error_fallback_to_av", "te_error_fallback_to_av"),
                 ("zip_archive_directory", "zip_archive_directory"),
                 ("tex_enabled", "tex_enabled"),
                 ("tex_url", "tex_url"),
@@ -898,6 +910,7 @@ class ScannerConfig:
             print(f"  AV Rule ID:            {self.av_rule_id}")
             print(f"  TE → AV Threshold:     {self.te_to_av_fallback_at_mb} MB")
             print(f"  AV → Sig Threshold:    {self.av_to_signature_fallback_at_mb} MB")
+            print(f"  TE Error → AV Fallback: {'Yes' if self.te_error_fallback_to_av else 'No'}")
 
         # Health Check Configuration
         print("Health Check:")

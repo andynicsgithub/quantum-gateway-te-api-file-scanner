@@ -350,6 +350,11 @@ def main(stop_event=None, cli_args=None):
         help="Files >= this (MB) skip AV path and use MD5 signature check only (default: from config, 2048)",
     )
     parser.add_argument(
+        "--te-error-fallback-to-av",
+        action="store_true",
+        help="Retry TE Error verdicts via AV fallback path (default: from config, false)",
+    )
+    parser.add_argument(
         "--tex-max-file-size-mb",
         type=int,
         help="Skip TEX processing for files >= this (MB) (default: from config, 15)",
@@ -671,41 +676,7 @@ def discover_files(input_directory, config):
     return archive_files, other_files, av_files, signature_files
 
 
-def _get_verdict_basename(directory):
-    """
-    Get a safe name for a directory to use as a ZIP internal path prefix.
-
-    On Windows, pathlib.Path.name can return an empty string for UNC paths
-    (e.g. \\\\server\\share) when the path has no subdirectory components.
-    This helper detects UNC paths and uses PureWindowsPath.parts to extract
-    the last meaningful component, skipping the UNC root part (\\\\server\\).
-    """
-    try:
-        import platform
-
-        if platform.system() != "Windows":
-            return directory.name
-
-        path_str = str(directory)
-        if path_str.startswith("\\\\"):
-            # Windows UNC path detected
-            from pathlib import PureWindowsPath
-
-            win_path = PureWindowsPath(path_str)
-            parts = win_path.parts
-            # UNC parts: ('\\\\server\\', 'share', 'dir', ...) -> skip first
-            meaningful = parts[1:] if len(parts) > 1 else parts
-            if meaningful:
-                return meaningful[-1]
-            # UNC root with no subdirs (e.g. \\\\server\\share) -> extract share name
-            remainder = path_str[2:]  # strip leading \\
-            parts = remainder.split("\\")
-            if len(parts) >= 2:
-                return parts[1]  # index 0 = server, index 1 = share
-            return path_str
-    except Exception:
-        pass
-    return directory.name
+_get_verdict_basename = PathHandler.get_verdict_basename
 
 
 def process_discovered_files(
