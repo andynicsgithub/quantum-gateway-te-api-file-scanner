@@ -330,7 +330,7 @@ class PathHandler:
 
     @staticmethod
     def get_verdict_basename(directory: Path) -> str:
-        """
+        r"""
         Get a safe name for a directory to use as a ZIP internal path prefix.
 
         On Windows, pathlib.Path.name can return an empty string for UNC paths
