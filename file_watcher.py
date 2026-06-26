@@ -639,7 +639,7 @@ def start_watching(config, url, url_tex="", api_healthy=True, stop_event=None):
         sig_error = 0
         sig_files_processed = 0
 
-          for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in signature_files:
+        for file_path, file_name, safe_file_name, sub_dir, full_path, file_size in signature_files:
             display_path = PathHandler.display_path(file_name, sub_dir)
             batch_logger.info(
                 f"MD5 signature check: {display_path} ({file_size / (1024*1024):.1f} MB)"
