@@ -41,6 +41,7 @@ class AVHandler:
         Args:
             config: ScannerConfig object with AV settings
         """
+        self.config = config
         self.appliance_ip = config.appliance_ip
         self.ssh_username = config.ssh_username
         self.ssh_password = config.ssh_password
