@@ -233,6 +233,7 @@ av_rule_id = 1
 te_to_av_fallback_at_mb = 100
 av_to_signature_fallback_at_mb = 2048
 te_error_fallback_to_av = false
+av_response_info_directory = av_response_info
 
 [HEALTHCHECK]
 # Health check test files directory (relative to app directory).

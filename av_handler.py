@@ -323,6 +323,31 @@ class AVHandler:
         from safe_filename import sanitize_for_remote as _sanitize
         return _sanitize(filename)
 
+    def _save_av_response_info(self, file_name: str, output: str, exit_code: int) -> None:
+        """Save AV response info to the av_response_info_directory.
+
+        Args:
+            file_name: Original filename
+            output: The stdout from the temain command
+            exit_code: The exit code from the command
+        """
+        try:
+            response_filename = f"{file_name}.AV.response.txt"
+            output_path = Path(self.config.av_response_info_directory) / response_filename
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Build response content
+            response_content = f"AV Response for {file_name}\n"
+            response_content += f"Exit Code: {exit_code}\n"
+            response_content += f"Output:\n{output}\n"
+
+            with open(output_path, "w", encoding="utf-8") as file:
+                file.write(response_content)
+
+            self.logger.debug(f"AV response info saved to: {output_path}")
+        except Exception as e:
+            self.logger.warning(f"Failed to save AV response info for {file_name}: {e}")
+
     def process_file(
         self,
         file_name: str,
@@ -403,6 +428,10 @@ class AVHandler:
         # Run AV analysis
         output, exit_code = self._run_av_analysis(remote_name)
         verdict = self._parse_verdict(output, exit_code)
+
+        # Save AV response info if enabled
+        if self.config.save_response_info and self.config.av_response_info_directory:
+            self._save_av_response_info(file_name, output, exit_code)
 
         logger.info(
             f"AV verdict for {file_name}: {verdict}"

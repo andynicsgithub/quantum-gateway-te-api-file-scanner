@@ -101,6 +101,7 @@ class ScannerConfig:
     te_to_av_fallback_at_mb: int = 100  # Files >= this (MB) skip TE, go to AV
     av_to_signature_fallback_at_mb: int = 2048  # Files >= this (MB) skip AV, use MD5 signature check only
     te_error_fallback_to_av: bool = False  # Retry TE Error verdicts via AV path
+    av_response_info_directory: Path = field(default_factory=lambda: Path("av_response_info"))
 
     # Health check configuration
     healthcheck_directory: Path = field(default_factory=lambda: Path("healthcheck"))
@@ -280,16 +281,17 @@ class ScannerConfig:
             "archive_extensions": set(),
             "save_response_info": True,
             "os_images": [],
-           "av_fallback_enabled": False,
-            "ssh_username": "",
-            "ssh_password": "",
-            "av_remote_directory": "/var/log/apiclient",
-            "av_rule_id": 1,
-            "te_to_av_fallback_at_mb": 100,
-            "av_to_signature_fallback_at_mb": 2048,
-            "te_error_fallback_to_av": False,
-            "tex_max_file_size_mb": 15,
-            "healthcheck_directory": "healthcheck",
+            "av_fallback_enabled": False,
+             "ssh_username": "",
+             "ssh_password": "",
+             "av_remote_directory": "/var/log/apiclient",
+             "av_rule_id": 1,
+             "te_to_av_fallback_at_mb": 100,
+             "av_to_signature_fallback_at_mb": 2048,
+             "te_error_fallback_to_av": False,
+             "av_response_info_directory": "av_response_info",
+             "tex_max_file_size_mb": 15,
+             "healthcheck_directory": "healthcheck",
         }
 
         # 2. Override with config file
@@ -626,7 +628,7 @@ class ScannerConfig:
                     config_data[key] = value
 
         # AV fallback env vars
-        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb", "te_error_fallback_to_av"}
+        _av_env_keys = {"av_fallback_enabled", "ssh_username", "ssh_password", "av_remote_directory", "av_rule_id", "te_to_av_fallback_at_mb", "av_to_signature_fallback_at_mb", "te_error_fallback_to_av", "av_response_info_directory"}
         for key in _av_env_keys:
             env_key = env_prefix + key.upper()
             if env_key in os.environ:
@@ -757,6 +759,7 @@ class ScannerConfig:
             "log_dir",
             "tex_response_info_directory",
             "tex_clean_files_directory",
+            "av_response_info_directory",
         ]
         for key in path_keys:
             if config_data[key] is not None:
@@ -911,6 +914,7 @@ class ScannerConfig:
             print(f"  TE → AV Threshold:     {self.te_to_av_fallback_at_mb} MB")
             print(f"  AV → Sig Threshold:    {self.av_to_signature_fallback_at_mb} MB")
             print(f"  TE Error → AV Fallback: {'Yes' if self.te_error_fallback_to_av else 'No'}")
+            print(f"  Response Info Dir:     {self.av_response_info_directory}")
 
         # Health Check Configuration
         print("Health Check:")
