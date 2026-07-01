@@ -17,6 +17,7 @@ import logging
 import warnings
 import hashlib
 import requests
+from cryptography.utils import CryptographyDeprecationWarning
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
@@ -273,7 +274,7 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
     warnings.filterwarnings(
         "ignore",
         message=".*TripleDES.*",
-        category=DeprecationWarning,
+        category=CryptographyDeprecationWarning,
     )
 
     # Import paramiko
