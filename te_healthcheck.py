@@ -17,12 +17,14 @@ import logging
 import warnings
 import hashlib
 import requests
-from cryptography.utils import CryptographyDeprecationWarning
 from pathlib import Path
 from datetime import datetime
 from typing import Dict, Optional
 
 logger = logging.getLogger("te_scanner.healthcheck")
+
+# Suppress paramiko's deprecated TripleDES warning (from cryptography lib)
+warnings.filterwarnings("ignore", message=".*TripleDES.*")
 
 # Health check timeout (seconds)
 HEALTHCHECK_TIMEOUT = 60
@@ -269,13 +271,6 @@ def check_av_health(config, healthcheck_dir: Optional[Path] = None) -> dict:
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             "message": error_msg,
         }
-
-    # Suppress paramiko's deprecated TripleDES warning (from cryptography lib)
-    warnings.filterwarnings(
-        "ignore",
-        message=".*TripleDES.*",
-        category=CryptographyDeprecationWarning,
-    )
 
     # Import paramiko
     try:
