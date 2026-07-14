@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_healthcheck.py v13.2 (alpha)
+te_healthcheck.py v13.3 (alpha)
 Health check module for TE API Scanner.
 
 Verifies TE API functionality by uploading and querying a test file,

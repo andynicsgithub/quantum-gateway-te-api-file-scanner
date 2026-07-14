@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-av_handler.py v13.2 (alpha)
+av_handler.py v13.3 (alpha)
 Antivirus (AV) fallback handler for files too large for TE or unsupported by TE.
 
 Uses SCP (via SFTP) to transfer files to the TE appliance and SSH to trigger
@@ -54,6 +54,7 @@ class AVHandler:
         self._timeout_seconds = 1800  # 30 min per AV analysis command
         self._max_retries = 2
         self._retry_delay = 5
+        self.logger = logger
 
     def __enter__(self):
         """Context manager entry — open SSH connection."""
@@ -222,11 +223,11 @@ class AVHandler:
 
                 if output:
                     logger.debug(
-                        f"AV analysis output for {remote_name}: {output.strip()[:500]}"
+                        f"AV analysis output for {remote_name}: {output.strip()}"
                     )
                 if stderr_text:
                     logger.debug(
-                        f"AV analysis stderr for {remote_name}: {stderr_text.strip()[:500]}"
+                        f"AV analysis stderr for {remote_name}: {stderr_text.strip()}"
                     )
 
                 return (output, exit_code)
@@ -276,6 +277,11 @@ class AVHandler:
                 return "Malicious"
             elif action == "accept":
                 return "Benign"
+            elif action == "error":
+                logger.warning(
+                    f"AV analysis returned action: {action} (file processing error)"
+                )
+                return "Error"
             else:
                 logger.warning(
                     f"AV analysis returned unrecognized action: {action}"

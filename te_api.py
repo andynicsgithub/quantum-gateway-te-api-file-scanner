@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
-te_api v13.2 (alpha)
+te_api v13.3 (alpha)
 """
 
 from te_file_handler import TE
@@ -381,7 +381,7 @@ def main(stop_event=None, cli_args=None):
         log_retention_days=config.log_retention_days,
     )
 
-    logger.info("TE API Scanner v13.2 - Loading configuration...")
+    logger.info("TE API Scanner v13.3 - Loading configuration...")
 
     # Display configuration summary
     config.print_summary()
